@@ -94,38 +94,80 @@ class ZoomFadeTransition extends CustomTransitionPage<void> {
 }
 
 /// Cinematic slide up transition - for player screen
+/// Slides up smoothly on enter, shrinks to bottom-right on exit (for PiP minimize)
 class CinematicSlideUpTransition extends CustomTransitionPage<void> {
   CinematicSlideUpTransition({
     required super.child,
     super.key,
   }) : super(
           transitionDuration: const Duration(milliseconds: 500),
-          reverseTransitionDuration: const Duration(milliseconds: 400),
+          reverseTransitionDuration: const Duration(milliseconds: 350),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            final curvedAnimation = CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutQuart,
-              reverseCurve: Curves.easeInQuart,
-            );
+            // Different behavior for enter vs exit
+            final isForward = animation.status == AnimationStatus.forward ||
+                animation.status == AnimationStatus.completed;
 
-            return SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0.0, 0.05),
-                end: Offset.zero,
-              ).animate(curvedAnimation),
-              child: FadeTransition(
-                opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
-                  CurvedAnimation(
-                    parent: animation,
-                    curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+            if (isForward) {
+              // Enter: Slide up with fade
+              final curvedAnimation = CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutQuart,
+              );
+
+              return SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0.0, 0.05),
+                  end: Offset.zero,
+                ).animate(curvedAnimation),
+                child: FadeTransition(
+                  opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
+                    CurvedAnimation(
+                      parent: animation,
+                      curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+                    ),
+                  ),
+                  child: Container(
+                    color: Colors.black,
+                    child: child,
                   ),
                 ),
+              );
+            } else {
+              // Exit: Shrink and slide toward bottom-right (where mini player appears)
+              final curvedAnimation = CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeInOutCubic,
+              );
+
+              return AnimatedBuilder(
+                animation: curvedAnimation,
+                builder: (context, child) {
+                  // Scale from 1.0 down to 0.3
+                  final scale = 0.3 + (0.7 * curvedAnimation.value);
+                  // Slide toward bottom-right as it shrinks
+                  final dx = 0.4 * (1 - curvedAnimation.value);
+                  final dy = 0.4 * (1 - curvedAnimation.value);
+
+                  return Transform(
+                    alignment: Alignment.bottomRight,
+                    transform: Matrix4.identity()
+                      ..translate(
+                        dx * MediaQuery.of(context).size.width,
+                        dy * MediaQuery.of(context).size.height,
+                      )
+                      ..scale(scale),
+                    child: Opacity(
+                      opacity: curvedAnimation.value.clamp(0.0, 1.0),
+                      child: child,
+                    ),
+                  );
+                },
                 child: Container(
                   color: Colors.black,
                   child: child,
                 ),
-              ),
-            );
+              );
+            }
           },
         );
 }

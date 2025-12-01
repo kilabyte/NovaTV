@@ -24,6 +24,13 @@ class StorageKeys {
   // Cache keys
   static const String lastEpgUpdate = 'last_epg_update';
   static const String lastPlaylistUpdate = 'last_playlist_update';
+
+  // Window settings keys
+  static const String windowWidth = 'window_width';
+  static const String windowHeight = 'window_height';
+  static const String windowX = 'window_x';
+  static const String windowY = 'window_y';
+  static const String windowMaximized = 'window_maximized';
 }
 
 /// Hive type IDs for registered adapters

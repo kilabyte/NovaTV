@@ -5,6 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'config/router/app_router.dart';
 import 'config/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
+import 'features/settings/presentation/providers/settings_providers.dart';
 
 /// Main application widget
 class NovaApp extends ConsumerWidget {
@@ -12,8 +13,7 @@ class NovaApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // TODO: Add theme mode provider when settings are implemented
-    // final themeMode = ref.watch(themeModeProvider);
+    final themeMode = ref.watch(themeModeProvider);
 
     return ScreenUtilInit(
       designSize: const Size(375, 812), // iPhone X design size
@@ -27,7 +27,7 @@ class NovaApp extends ConsumerWidget {
           // Theme configuration
           theme: AppTheme.light,
           darkTheme: AppTheme.dark,
-          themeMode: ThemeMode.dark, // Default to dark for video apps
+          themeMode: themeMode,
 
           // Router configuration
           routerConfig: appRouter,

@@ -200,7 +200,10 @@ class PlaylistLocalDataSourceImpl implements PlaylistLocalDataSource {
   Future<List<ChannelModel>> getChannelsByGroup(String group) async {
     try {
       final box = await channelBox;
-      return box.values.where((c) => c.group == group).toList();
+      final allChannels = box.values.toList();
+      // Use case-insensitive matching for better compatibility with different M3U formats
+      return allChannels.where((c) =>
+        c.group?.toLowerCase() == group.toLowerCase()).toList();
     } catch (e) {
       throw CacheException('Failed to get channels by group: $e');
     }

@@ -60,6 +60,28 @@ final currentProgramProvider = FutureProvider.family<Program?, ({String playlist
   },
 );
 
+/// Provider for next program of a channel (up next)
+final nextProgramProvider = FutureProvider.family<Program?, ({String playlistId, String channelId})>(
+  (ref, params) async {
+    final repository = ref.read(epgRepositoryProvider);
+    final result = await repository.getProgramsForChannel(params.playlistId, params.channelId);
+    return result.fold(
+      (failure) => null,
+      (programs) {
+        final now = DateTime.now();
+        // Sort programs by start time and find the first one that starts after now
+        final sortedPrograms = [...programs]..sort((a, b) => a.start.compareTo(b.start));
+        for (final program in sortedPrograms) {
+          if (program.start.isAfter(now)) {
+            return program;
+          }
+        }
+        return null;
+      },
+    );
+  },
+);
+
 /// Provider for programs in a time range
 final programsInRangeProvider = FutureProvider.family<List<Program>, ({String playlistId, DateTime start, DateTime end})>(
   (ref, params) async {

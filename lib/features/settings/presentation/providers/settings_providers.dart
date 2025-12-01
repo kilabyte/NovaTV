@@ -107,6 +107,15 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsModel> {
     _saveSettings();
   }
 
+  void setLastTvGuideCategory(String? category) {
+    if (category == null) {
+      state = state.copyWith(clearLastTvGuideCategory: true);
+    } else {
+      state = state.copyWith(lastTvGuideCategory: category);
+    }
+    _saveSettings();
+  }
+
   Future<void> resetToDefaults() async {
     state = AppSettingsModel();
     await _saveSettings();

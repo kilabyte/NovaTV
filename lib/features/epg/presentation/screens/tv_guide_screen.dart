@@ -96,7 +96,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       body: Column(
         children: [
           SizedBox(
-              height: MediaQuery.of(context).padding.top + kToolbarHeight + 56),
+              height: MediaQuery.of(context).padding.top + kToolbarHeight + 44),
           // Main content
           Expanded(
             child: channelsAsync.when(
@@ -119,7 +119,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     final selectedDate = ref.watch(selectedDateProvider);
 
     return PreferredSize(
-      preferredSize: const Size.fromHeight(kToolbarHeight + 56),
+      preferredSize: const Size.fromHeight(kToolbarHeight + 44),
       child: ClipRRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
@@ -195,10 +195,10 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     });
 
     return SizedBox(
-      height: 56,
+      height: 44,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         itemCount: dates.length,
         itemBuilder: (context, index) {
           final date = dates[index];
@@ -1017,17 +1017,17 @@ class _DateChipState extends State<_DateChip> {
         color: Colors.transparent,
         child: InkWell(
           onTap: widget.onTap,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: widget.isSelected
                   ? AppColors.primary
                   : _isHovered
                       ? AppColors.darkSurfaceHover
                       : AppColors.darkSurfaceVariant,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               border: Border.all(
                 color: widget.isSelected
                     ? AppColors.primary
@@ -1036,7 +1036,7 @@ class _DateChipState extends State<_DateChip> {
                         : AppColors.darkBorder,
               ),
             ),
-            child: Column(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
@@ -1045,18 +1045,20 @@ class _DateChipState extends State<_DateChip> {
                     color: widget.isSelected
                         ? AppColors.darkBackground
                         : AppColors.darkOnSurface,
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight:
                         widget.isSelected ? FontWeight.w600 : FontWeight.w500,
                   ),
                 ),
+                const SizedBox(width: 4),
                 Text(
                   '${widget.date.day}',
                   style: TextStyle(
                     color: widget.isSelected
-                        ? AppColors.darkBackground
+                        ? AppColors.darkBackground.withValues(alpha: 0.8)
                         : AppColors.darkOnSurfaceVariant,
-                    fontSize: 10,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],

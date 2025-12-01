@@ -184,7 +184,7 @@ class _SidebarNavigationState extends State<SidebarNavigation>
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              gradient: AppColors.primaryGradient,
+              color: AppColors.primary,
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Center(

@@ -541,14 +541,12 @@ class _SidebarItem extends StatefulWidget {
   final String label;
   final bool isSelected;
   final VoidCallback onTap;
-  final bool isMuted;
 
   const _SidebarItem({
     required this.icon,
     required this.label,
     required this.isSelected,
     required this.onTap,
-    this.isMuted = false,
   });
 
   @override
@@ -585,11 +583,9 @@ class _SidebarItemState extends State<_SidebarItem> {
                 widget.icon,
                 color: widget.isSelected
                     ? AppColors.primary
-                    : widget.isMuted
-                        ? AppColors.textMuted
-                        : isHighlighted
-                            ? AppColors.textPrimary
-                            : AppColors.textSecondary,
+                    : isHighlighted
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
                 size: 20,
               ),
               const SizedBox(width: 12),
@@ -599,11 +595,9 @@ class _SidebarItemState extends State<_SidebarItem> {
                   style: TextStyle(
                     color: widget.isSelected
                         ? AppColors.textPrimary
-                        : widget.isMuted
-                            ? AppColors.textMuted
-                            : isHighlighted
-                                ? AppColors.textPrimary
-                                : AppColors.textSecondary,
+                        : isHighlighted
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary,
                     fontSize: 14,
                     fontWeight: widget.isSelected ? FontWeight.w500 : FontWeight.w400,
                   ),

@@ -86,12 +86,16 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
   }
 
   void _scrollToCurrentTime() {
-    // Scroll so that current time aligns to left edge
+    // Scroll so that current time is offset to the right (about 1/3 from left edge)
+    // This gives better visibility of what's currently playing
     final now = DateTime.now();
     final minutesSinceBase = now.difference(_baseDate).inMinutes;
 
     if (minutesSinceBase >= 0 && minutesSinceBase < (_totalHours * 60)) {
-      final offset = (minutesSinceBase / 60.0) * _hourWidth;
+      // Calculate position for current time, then shift left by ~1 hour width
+      // so "now" appears more to the right in the viewport
+      final rawOffset = (minutesSinceBase / 60.0) * _hourWidth;
+      final offset = rawOffset - _hourWidth; // Shift view back by 1 hour
       if (_timeHeaderController.hasClients) {
         final maxOffset = (_totalHours * _hourWidth) - 400.0;
         _timeHeaderController.animateTo(
@@ -580,7 +584,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
                   ),
                 ),
               ),
-              child: _buildProgramRow(context, programs, startTime, endTime),
+              child: _buildProgramRow(context, channel, programs, startTime, endTime),
             );
           },
         ),
@@ -590,6 +594,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
 
   Widget _buildProgramRow(
     BuildContext context,
+    Channel channel,
     List<Program> programs,
     DateTime gridStart,
     DateTime gridEnd,
@@ -638,7 +643,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
           program: program,
           width: cellWidth,
           height: _rowHeight,
-          onTap: () => _showProgramDetails(context, program),
+          onTap: () => _showProgramDetails(context, program, channel),
         ));
       }
 
@@ -736,7 +741,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     }
   }
 
-  void _showProgramDetails(BuildContext context, Program program) {
+  void _showProgramDetails(BuildContext context, Program program, Channel channel) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -758,7 +763,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
               onWatchNow: program.isCurrentlyAiring
                   ? () {
                       Navigator.pop(context);
-                      context.push(Routes.playerPath(program.channelId));
+                      context.push(Routes.playerPath(channel.id));
                     }
                   : null,
             ),

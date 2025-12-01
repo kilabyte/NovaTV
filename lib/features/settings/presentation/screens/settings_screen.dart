@@ -894,6 +894,14 @@ class _AboutTile extends StatelessWidget {
                   fontSize: 13,
                 ),
               ),
+              const SizedBox(height: 2),
+              Text(
+                '© Kilabyte IO',
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 12,
+                ),
+              ),
             ],
           ),
         ],

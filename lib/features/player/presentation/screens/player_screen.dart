@@ -528,7 +528,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                     currentProgram!.value!.title,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 17,
+                      fontSize: 22,
                       fontWeight: FontWeight.w600,
                     ),
                     maxLines: 1,

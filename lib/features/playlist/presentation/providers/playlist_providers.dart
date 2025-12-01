@@ -16,6 +16,7 @@ import '../../domain/usecases/refresh_playlist.dart';
 import '../../domain/usecases/search_channels.dart';
 import '../../domain/usecases/toggle_favorite.dart';
 import '../../../../core/usecase/usecase.dart';
+import '../../../epg/presentation/providers/epg_providers.dart';
 
 // Data source providers
 final dioProvider = Provider<Dio>((ref) {
@@ -206,11 +207,20 @@ class PlaylistNotifier extends StateNotifier<AsyncValue<List<Playlist>>> {
 
     result.fold(
       (failure) => throw Exception(failure.message),
-      (_) {
+      (playlist) {
         _loadPlaylists();
         // Invalidate related providers
         _ref.invalidate(allChannelsProvider);
         _ref.invalidate(channelGroupsProvider);
+
+        // Auto-refresh EPG if an EPG URL is available
+        final effectiveEpgUrl = playlist.epgUrl;
+        if (effectiveEpgUrl != null && effectiveEpgUrl.isNotEmpty) {
+          _ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(
+                playlist.id,
+                effectiveEpgUrl,
+              );
+        }
       },
     );
   }
@@ -221,11 +231,20 @@ class PlaylistNotifier extends StateNotifier<AsyncValue<List<Playlist>>> {
 
     result.fold(
       (failure) => throw Exception(failure.message),
-      (_) {
+      (playlist) {
         _loadPlaylists();
         _ref.invalidate(allChannelsProvider);
         _ref.invalidate(channelGroupsProvider);
         _ref.invalidate(channelsByPlaylistProvider(playlistId));
+
+        // Also refresh EPG if available
+        final epgUrl = playlist.epgUrl;
+        if (epgUrl != null && epgUrl.isNotEmpty) {
+          _ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(
+                playlist.id,
+                epgUrl,
+              );
+        }
       },
     );
   }

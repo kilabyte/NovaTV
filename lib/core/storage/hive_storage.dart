@@ -1,6 +1,7 @@
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'local_storage.dart';
 import '../constants/storage_keys.dart';
+import '../../hive_registrar.g.dart';
 
 /// Hive implementation of local storage
 class HiveStorage implements LocalStorage {
@@ -10,10 +11,8 @@ class HiveStorage implements LocalStorage {
   Future<void> init() async {
     await Hive.initFlutter();
 
-    // Register adapters here when models are created
-    // Hive.registerAdapter(PlaylistModelAdapter());
-    // Hive.registerAdapter(ChannelModelAdapter());
-    // etc.
+    // Register all Hive adapters using the generated registrar
+    Hive.registerAdapters();
   }
 
   Future<Box<T>> _getBox<T>(String boxName) async {

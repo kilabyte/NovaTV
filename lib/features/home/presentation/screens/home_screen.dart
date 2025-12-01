@@ -1,19 +1,18 @@
-import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../config/router/routes.dart';
 import '../../../../config/theme/app_colors.dart';
-import '../../../../shared/widgets/premium_widgets.dart';
 import '../../../epg/domain/entities/program.dart';
 import '../../../epg/presentation/providers/epg_providers.dart';
 import '../../../playlist/domain/entities/channel.dart';
 import '../../../playlist/presentation/providers/playlist_providers.dart';
 import '../../../settings/presentation/providers/settings_providers.dart';
 
-/// Premium Home Screen with cinematic design
+/// TiViMate-style Home Screen - Clean, content-first design
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -31,24 +30,24 @@ class HomeScreen extends ConsumerWidget {
           }
           return CustomScrollView(
             slivers: [
-              // Premium App Bar
-              _PremiumAppBar(),
+              // Clean Header
+              _HomeHeader(),
 
-              // Hero Section - Continue Watching
+              // Continue Watching Section
               SliverToBoxAdapter(
-                child: _HeroSection(),
+                child: _ContinueWatchingSection(),
               ),
 
-              // Quick Access Cards
+              // Quick Actions Row
               SliverToBoxAdapter(
-                child: _QuickAccessSection(),
+                child: _QuickActionsRow(),
               ),
 
-              // Favorites Section
+              // Favorites Grid
               SliverToBoxAdapter(
                 child: favoritesAsync.when(
-                  data: (favorites) => _FavoritesSection(favorites: favorites),
-                  loading: () => const SizedBox(),
+                  data: (favorites) => _FavoritesGrid(favorites: favorites),
+                  loading: () => const SizedBox(height: 100),
                   error: (_, __) => const SizedBox(),
                 ),
               ),
@@ -60,7 +59,7 @@ class HomeScreen extends ConsumerWidget {
 
               // Bottom Padding
               const SliverToBoxAdapter(
-                child: SizedBox(height: 100),
+                child: SizedBox(height: 32),
               ),
             ],
           );
@@ -75,46 +74,24 @@ class HomeScreen extends ConsumerWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// PREMIUM APP BAR
+// HOME HEADER - Clean, minimal
 // ═══════════════════════════════════════════════════════════════════════════
-class _PremiumAppBar extends StatelessWidget {
+class _HomeHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SliverAppBar(
       floating: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.darkBackground,
+      surfaceTintColor: Colors.transparent,
       elevation: 0,
-      flexibleSpace: ClipRRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(color: Colors.transparent),
-        ),
-      ),
+      toolbarHeight: 60,
       title: Row(
         children: [
-          // Logo
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: AppColors.gradientPrimary,
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.play_arrow_rounded,
-              color: Colors.white,
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 12),
-          const GradientText(
-            text: 'NovaTV',
+          Text(
+            'Home',
             style: TextStyle(
-              fontSize: 22,
+              color: AppColors.darkOnSurface,
+              fontSize: 28,
               fontWeight: FontWeight.w700,
               letterSpacing: -0.5,
             ),
@@ -123,39 +100,26 @@ class _PremiumAppBar extends StatelessWidget {
       ),
       actions: [
         IconButton(
-          icon: const Icon(Icons.search_rounded),
+          icon: Icon(Icons.search_rounded, color: AppColors.darkOnSurfaceVariant),
           onPressed: () => context.push(Routes.search),
-          style: IconButton.styleFrom(
-            backgroundColor: AppColors.darkSurfaceVariant,
-            foregroundColor: AppColors.darkOnSurface,
-          ),
         ),
         const SizedBox(width: 8),
-        IconButton(
-          icon: const Icon(Icons.settings_rounded),
-          onPressed: () => context.push(Routes.settings),
-          style: IconButton.styleFrom(
-            backgroundColor: AppColors.darkSurfaceVariant,
-            foregroundColor: AppColors.darkOnSurface,
-          ),
-        ),
-        const SizedBox(width: 16),
       ],
     );
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// HERO SECTION - CONTINUE WATCHING
+// CONTINUE WATCHING SECTION
 // ═══════════════════════════════════════════════════════════════════════════
-class _HeroSection extends ConsumerWidget {
+class _ContinueWatchingSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
     final lastChannelId = settings.lastPlayedChannelId;
 
     if (!settings.rememberLastChannel || lastChannelId == null) {
-      return _FeaturedBanner();
+      return const SizedBox();
     }
 
     final channelsAsync = ref.watch(allChannelsProvider);
@@ -163,108 +127,34 @@ class _HeroSection extends ConsumerWidget {
     return channelsAsync.when(
       data: (channels) {
         final lastChannel = channels.where((c) => c.id == lastChannelId).firstOrNull;
-        if (lastChannel == null) return _FeaturedBanner();
-        return _ContinueWatchingHero(channel: lastChannel);
+        if (lastChannel == null) return const SizedBox();
+        return _ContinueWatchingCard(channel: lastChannel);
       },
-      loading: () => _FeaturedBanner(),
-      error: (_, __) => _FeaturedBanner(),
+      loading: () => const SizedBox(),
+      error: (_, __) => const SizedBox(),
     );
   }
 }
 
-class _FeaturedBanner extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 220,
-      margin: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
-          colors: AppColors.gradientAurora,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Stack(
-        children: [
-          // Background pattern
-          Positioned.fill(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: CustomPaint(
-                painter: _GridPatternPainter(),
-              ),
-            ),
-          ),
-          // Content
-          Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                const Text(
-                  'Welcome to NovaTV',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Stream your favorite channels anywhere',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white.withValues(alpha: 0.9),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.play_arrow_rounded),
-                  label: const Text('Start Watching'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ContinueWatchingHero extends StatelessWidget {
+class _ContinueWatchingCard extends StatelessWidget {
   final Channel channel;
 
-  const _ContinueWatchingHero({required this.channel});
+  const _ContinueWatchingCard({required this.channel});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 220,
-      margin: const EdgeInsets.all(16),
-      child: GlowContainer(
-        glowColor: AppColors.primary,
-        blurRadius: 30,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          context.push(Routes.playerPath(channel.id));
+        },
         child: Container(
+          height: 100,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            gradient: LinearGradient(
-              colors: [
-                AppColors.darkSurfaceElevated,
-                AppColors.darkSurfaceVariant,
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            color: AppColors.darkSurfaceElevated,
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: AppColors.primary.withValues(alpha: 0.3),
               width: 1,
@@ -273,86 +163,79 @@ class _ContinueWatchingHero extends StatelessWidget {
           child: Row(
             children: [
               // Channel Logo
-              Expanded(
-                flex: 2,
-                child: Container(
-                  margin: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: AppColors.darkSurface,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: channel.logoUrl != null
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: CachedNetworkImage(
-                            imageUrl: channel.logoUrl!,
-                            fit: BoxFit.contain,
-                            errorWidget: (_, __, ___) => _buildPlaceholder(),
-                          ),
-                        )
-                      : _buildPlaceholder(),
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: AppColors.darkSurface,
+                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(11)),
                 ),
+                child: channel.logoUrl != null
+                    ? ClipRRect(
+                        borderRadius: const BorderRadius.horizontal(left: Radius.circular(11)),
+                        child: CachedNetworkImage(
+                          imageUrl: channel.logoUrl!,
+                          fit: BoxFit.contain,
+                          errorWidget: (_, __, ___) => _buildPlaceholder(),
+                        ),
+                      )
+                    : _buildPlaceholder(),
               ),
               // Info
               Expanded(
-                flex: 3,
                 child: Padding(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        'Continue Watching',
+                        'CONTINUE WATCHING',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 10,
                           fontWeight: FontWeight.w600,
                           color: AppColors.primary,
                           letterSpacing: 0.5,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       Text(
                         channel.displayName,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
                           color: AppColors.darkOnSurface,
-                          letterSpacing: -0.5,
                         ),
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       if (channel.group != null) ...[
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Text(
                           channel.group!,
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 13,
                             color: AppColors.darkOnSurfaceVariant,
                           ),
                         ),
                       ],
-                      const Spacer(),
-                      Row(
-                        children: [
-                          FilledButton.icon(
-                            onPressed: () => context.push(
-                              Routes.playerPath(channel.id),
-                            ),
-                            icon: const Icon(Icons.play_arrow_rounded, size: 20),
-                            label: const Text('Resume'),
-                            style: FilledButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
+                ),
+              ),
+              // Play Button
+              Container(
+                margin: const EdgeInsets.only(right: 16),
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(22),
+                ),
+                child: const Icon(
+                  Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: 28,
                 ),
               ),
             ],
@@ -366,7 +249,7 @@ class _ContinueWatchingHero extends StatelessWidget {
     return Center(
       child: Icon(
         Icons.tv_rounded,
-        size: 48,
+        size: 32,
         color: AppColors.darkOnSurfaceMuted,
       ),
     );
@@ -374,60 +257,40 @@ class _ContinueWatchingHero extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// QUICK ACCESS SECTION
+// QUICK ACTIONS ROW - TiViMate style
 // ═══════════════════════════════════════════════════════════════════════════
-class _QuickAccessSection extends StatelessWidget {
+class _QuickActionsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          const SectionHeader(title: 'Quick Access'),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: _QuickAccessCard(
-                  icon: Icons.live_tv_rounded,
-                  label: 'All Channels',
-                  color: AppColors.primary,
-                  onTap: () => context.go(Routes.channels),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _QuickAccessCard(
-                  icon: Icons.calendar_month_rounded,
-                  label: 'TV Guide',
-                  color: AppColors.accentPurple,
-                  onTap: () => context.go(Routes.tvGuide),
-                ),
-              ),
-            ],
+          Expanded(
+            child: _QuickActionButton(
+              icon: Icons.live_tv_rounded,
+              label: 'Live TV',
+              color: AppColors.primary,
+              onTap: () => context.go(Routes.channels),
+            ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _QuickAccessCard(
-                  icon: Icons.favorite_rounded,
-                  label: 'Favorites',
-                  color: AppColors.accent,
-                  onTap: () => context.go(Routes.favorites),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _QuickAccessCard(
-                  icon: Icons.playlist_play_rounded,
-                  label: 'Playlists',
-                  color: AppColors.secondary,
-                  onTap: () => context.push(Routes.playlists),
-                ),
-              ),
-            ],
+          const SizedBox(width: 10),
+          Expanded(
+            child: _QuickActionButton(
+              icon: Icons.calendar_month_rounded,
+              label: 'Guide',
+              color: AppColors.accentPurple,
+              onTap: () => context.go(Routes.tvGuide),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _QuickActionButton(
+              icon: Icons.playlist_play_rounded,
+              label: 'Playlists',
+              color: AppColors.secondary,
+              onTap: () => context.go(Routes.playlists),
+            ),
           ),
         ],
       ),
@@ -435,13 +298,13 @@ class _QuickAccessSection extends StatelessWidget {
   }
 }
 
-class _QuickAccessCard extends StatefulWidget {
+class _QuickActionButton extends StatefulWidget {
   final IconData icon;
   final String label;
   final Color color;
   final VoidCallback onTap;
 
-  const _QuickAccessCard({
+  const _QuickActionButton({
     required this.icon,
     required this.label,
     required this.color,
@@ -449,10 +312,10 @@ class _QuickAccessCard extends StatefulWidget {
   });
 
   @override
-  State<_QuickAccessCard> createState() => _QuickAccessCardState();
+  State<_QuickActionButton> createState() => _QuickActionButtonState();
 }
 
-class _QuickAccessCardState extends State<_QuickAccessCard> {
+class _QuickActionButtonState extends State<_QuickActionButton> {
   bool _isHovered = false;
 
   @override
@@ -461,51 +324,41 @@ class _QuickAccessCardState extends State<_QuickAccessCard> {
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          widget.onTap();
+        },
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.all(16),
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
             color: _isHovered
                 ? widget.color.withValues(alpha: 0.15)
                 : AppColors.darkSurfaceVariant,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: _isHovered
-                  ? widget.color.withValues(alpha: 0.5)
+                  ? widget.color.withValues(alpha: 0.4)
                   : AppColors.darkBorder,
               width: 1,
             ),
           ),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: widget.color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  widget.icon,
-                  color: widget.color,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  widget.label,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: _isHovered ? widget.color : AppColors.darkOnSurface,
-                  ),
-                ),
-              ),
               Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 14,
-                color: _isHovered ? widget.color : AppColors.darkOnSurfaceMuted,
+                widget.icon,
+                color: widget.color,
+                size: 28,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                widget.label,
+                style: TextStyle(
+                  color: _isHovered ? widget.color : AppColors.darkOnSurface,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -516,103 +369,83 @@ class _QuickAccessCardState extends State<_QuickAccessCard> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// FAVORITES SECTION
+// FAVORITES GRID - TiViMate style channel grid
 // ═══════════════════════════════════════════════════════════════════════════
-class _FavoritesSection extends StatelessWidget {
+class _FavoritesGrid extends StatelessWidget {
   final List<Channel> favorites;
 
-  const _FavoritesSection({required this.favorites});
+  const _FavoritesGrid({required this.favorites});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeader(
-            title: 'Favorites',
-            actionText: favorites.isNotEmpty ? 'See All' : null,
-            onActionTap: () => context.go(Routes.favorites),
+    if (favorites.isEmpty) return const SizedBox();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.star_rounded,
+                    color: AppColors.favorite,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Favorites',
+                    style: TextStyle(
+                      color: AppColors.darkOnSurface,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              GestureDetector(
+                onTap: () => context.go(Routes.favorites),
+                child: Text(
+                  'See All',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          if (favorites.isEmpty)
-            _EmptyFavorites()
-          else
-            SizedBox(
-              height: 160,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: favorites.length > 10 ? 10 : favorites.length,
-                itemBuilder: (context, index) {
-                  final channel = favorites[index];
-                  return _FavoriteCard(channel: channel);
-                },
-              ),
-            ),
-        ],
-      ),
+        ),
+        SizedBox(
+          height: 130,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: favorites.length > 10 ? 10 : favorites.length,
+            itemBuilder: (context, index) {
+              return _FavoriteChannelCard(channel: favorites[index]);
+            },
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _EmptyFavorites extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 120,
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: AppColors.darkSurfaceVariant,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppColors.darkBorder,
-          width: 1,
-        ),
-      ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.favorite_border_rounded,
-              size: 32,
-              color: AppColors.darkOnSurfaceMuted,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'No favorites yet',
-              style: TextStyle(
-                color: AppColors.darkOnSurfaceMuted,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Add channels to your favorites for quick access',
-              style: TextStyle(
-                color: AppColors.darkOnSurfaceMuted,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FavoriteCard extends StatefulWidget {
+class _FavoriteChannelCard extends StatefulWidget {
   final Channel channel;
 
-  const _FavoriteCard({required this.channel});
+  const _FavoriteChannelCard({required this.channel});
 
   @override
-  State<_FavoriteCard> createState() => _FavoriteCardState();
+  State<_FavoriteChannelCard> createState() => _FavoriteChannelCardState();
 }
 
-class _FavoriteCardState extends State<_FavoriteCard> {
+class _FavoriteChannelCardState extends State<_FavoriteChannelCard> {
   bool _isHovered = false;
 
   @override
@@ -621,87 +454,72 @@ class _FavoriteCardState extends State<_FavoriteCard> {
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
-        onTap: () => context.push(Routes.playerPath(widget.channel.id)),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          context.push(Routes.playerPath(widget.channel.id));
+        },
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          width: 120,
-          margin: const EdgeInsets.only(right: 12),
+          duration: const Duration(milliseconds: 150),
+          width: 100,
+          margin: const EdgeInsets.only(right: 10),
           decoration: BoxDecoration(
-            color: AppColors.darkSurfaceVariant,
-            borderRadius: BorderRadius.circular(16),
+            color: _isHovered
+                ? AppColors.darkSurfaceHover
+                : AppColors.darkSurfaceVariant,
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: _isHovered
-                  ? AppColors.primary.withValues(alpha: 0.5)
+                  ? AppColors.primary.withValues(alpha: 0.4)
                   : AppColors.darkBorder,
               width: 1,
             ),
-            boxShadow: _isHovered
-                ? [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.2),
-                      blurRadius: 12,
-                    ),
-                  ]
-                : null,
           ),
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               // Logo
-              Expanded(
-                flex: 3,
-                child: Container(
-                  width: double.infinity,
-                  decoration: const BoxDecoration(
-                    color: AppColors.darkSurface,
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(15),
-                    ),
-                  ),
-                  child: widget.channel.logoUrl != null
-                      ? ClipRRect(
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(15),
-                          ),
-                          child: CachedNetworkImage(
-                            imageUrl: widget.channel.logoUrl!,
-                            fit: BoxFit.contain,
-                            errorWidget: (_, __, ___) => Icon(
-                              Icons.tv_rounded,
-                              size: 32,
-                              color: AppColors.darkOnSurfaceMuted,
-                            ),
-                          ),
-                        )
-                      : Icon(
-                          Icons.tv_rounded,
-                          size: 32,
-                          color: AppColors.darkOnSurfaceMuted,
-                        ),
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: AppColors.darkSurface,
+                  borderRadius: BorderRadius.circular(10),
                 ),
-              ),
-              // Name
-              Expanded(
-                flex: 2,
-                child: Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        widget.channel.displayName,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
-                          color: _isHovered
-                              ? AppColors.primary
-                              : AppColors.darkOnSurface,
+                child: widget.channel.logoUrl != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: CachedNetworkImage(
+                          imageUrl: widget.channel.logoUrl!,
+                          fit: BoxFit.contain,
+                          errorWidget: (_, __, ___) => Icon(
+                            Icons.tv_rounded,
+                            size: 24,
+                            color: AppColors.darkOnSurfaceMuted,
+                          ),
                         ),
-                        maxLines: 2,
-                        textAlign: TextAlign.center,
-                        overflow: TextOverflow.ellipsis,
+                      )
+                    : Icon(
+                        Icons.tv_rounded,
+                        size: 24,
+                        color: AppColors.darkOnSurfaceMuted,
                       ),
-                    ],
+              ),
+              const SizedBox(height: 8),
+              // Name
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  widget.channel.displayName,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: _isHovered
+                        ? AppColors.primary
+                        : AppColors.darkOnSurface,
                   ),
+                  maxLines: 2,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -728,32 +546,49 @@ class _WhatsOnNowSection extends ConsumerWidget {
         final playlistId = playlistsAsync.valueOrNull?.firstOrNull?.id ?? '';
         if (playlistId.isEmpty) return const SizedBox();
 
-        return Padding(
-          padding: const EdgeInsets.only(top: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SectionHeader(
-                title: "What's On Now",
-                actionText: 'Full Guide',
-                onActionTap: () => context.go(Routes.tvGuide),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "What's On Now",
+                    style: TextStyle(
+                      color: AppColors.darkOnSurface,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => context.go(Routes.tvGuide),
+                    child: Text(
+                      'Full Guide',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: favorites.length > 5 ? 5 : favorites.length,
-                itemBuilder: (context, index) {
-                  final channel = favorites[index];
-                  return _NowPlayingCard(
-                    playlistId: playlistId,
-                    channel: channel,
-                  );
-                },
-              ),
-            ],
-          ),
+            ),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: favorites.length > 5 ? 5 : favorites.length,
+              itemBuilder: (context, index) {
+                return _NowPlayingItem(
+                  playlistId: playlistId,
+                  channel: favorites[index],
+                );
+              },
+            ),
+          ],
         );
       },
       loading: () => const SizedBox(),
@@ -762,11 +597,11 @@ class _WhatsOnNowSection extends ConsumerWidget {
   }
 }
 
-class _NowPlayingCard extends ConsumerWidget {
+class _NowPlayingItem extends ConsumerWidget {
   final String playlistId;
   final Channel channel;
 
-  const _NowPlayingCard({
+  const _NowPlayingItem({
     required this.playlistId,
     required this.channel,
   });
@@ -780,95 +615,91 @@ class _NowPlayingCard extends ConsumerWidget {
       )),
     );
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: AppColors.darkSurfaceVariant,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: () => context.push(Routes.playerPath(channel.id)),
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                // Channel Logo
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: AppColors.darkSurface,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: channel.logoUrl != null
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: CachedNetworkImage(
-                            imageUrl: channel.logoUrl!,
-                            fit: BoxFit.contain,
-                            errorWidget: (_, __, ___) => Icon(
-                              Icons.tv_rounded,
-                              size: 24,
-                              color: AppColors.darkOnSurfaceMuted,
-                            ),
-                          ),
-                        )
-                      : Icon(
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        context.push(Routes.playerPath(channel.id));
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.darkSurfaceVariant,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            // Channel Logo
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: AppColors.darkSurface,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: channel.logoUrl != null
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: CachedNetworkImage(
+                        imageUrl: channel.logoUrl!,
+                        fit: BoxFit.contain,
+                        errorWidget: (_, __, ___) => Icon(
                           Icons.tv_rounded,
-                          size: 24,
+                          size: 20,
                           color: AppColors.darkOnSurfaceMuted,
                         ),
-                ),
-                const SizedBox(width: 12),
-                // Info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        channel.displayName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
                       ),
-                      const SizedBox(height: 2),
-                      programAsync.when(
-                        data: (program) => _buildProgramInfo(program),
-                        loading: () => Text(
-                          'Loading...',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.darkOnSurfaceMuted,
-                          ),
-                        ),
-                        error: (_, __) => Text(
-                          'No program info',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.darkOnSurfaceMuted,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Play Button
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.play_arrow_rounded,
-                    color: AppColors.primary,
-                    size: 20,
-                  ),
-                ),
-              ],
+                    )
+                  : Icon(
+                      Icons.tv_rounded,
+                      size: 20,
+                      color: AppColors.darkOnSurfaceMuted,
+                    ),
             ),
-          ),
+            const SizedBox(width: 12),
+            // Info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    channel.displayName,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      color: AppColors.darkOnSurface,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  programAsync.when(
+                    data: (program) => _buildProgramInfo(program),
+                    loading: () => Text(
+                      'Loading...',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.darkOnSurfaceMuted,
+                      ),
+                    ),
+                    error: (_, __) => Text(
+                      'No program info',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.darkOnSurfaceMuted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Play indicator
+            Icon(
+              Icons.play_circle_filled_rounded,
+              color: AppColors.primary,
+              size: 32,
+            ),
+          ],
         ),
       ),
     );
@@ -893,7 +724,6 @@ class _NowPlayingCard extends ConsumerWidget {
           style: TextStyle(
             fontSize: 12,
             color: AppColors.primary,
-            fontWeight: FontWeight.w500,
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -914,7 +744,7 @@ class _NowPlayingCard extends ConsumerWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// WELCOME SCREEN (No playlists)
+// WELCOME SCREEN
 // ═══════════════════════════════════════════════════════════════════════════
 class _WelcomeScreen extends StatelessWidget {
   @override
@@ -927,54 +757,49 @@ class _WelcomeScreen extends StatelessWidget {
           children: [
             // Logo
             Container(
-              width: 100,
-              height: 100,
+              width: 80,
+              height: 80,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: AppColors.gradientPrimary,
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.3),
-                    blurRadius: 30,
-                    spreadRadius: 0,
-                  ),
-                ],
+                gradient: AppColors.primaryGradient,
+                borderRadius: BorderRadius.circular(20),
               ),
               child: const Icon(
-                Icons.play_arrow_rounded,
+                Icons.live_tv_rounded,
                 color: Colors.white,
-                size: 56,
+                size: 44,
               ),
             ),
-            const SizedBox(height: 32),
-            const GradientText(
-              text: 'Welcome to NovaTV',
+            const SizedBox(height: 24),
+            Text(
+              'Welcome to NovaTV',
               style: TextStyle(
-                fontSize: 32,
+                fontSize: 28,
                 fontWeight: FontWeight.w700,
+                color: AppColors.darkOnSurface,
                 letterSpacing: -0.5,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
-              'Your premium cross-platform IPTV player',
+              'Stream your favorite channels anywhere',
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 15,
                 color: AppColors.darkOnSurfaceVariant,
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 48),
+            const SizedBox(height: 40),
             FilledButton.icon(
               onPressed: () => context.push('${Routes.playlists}/add'),
               icon: const Icon(Icons.add_rounded),
               label: const Text('Add Your First Playlist'),
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -1014,11 +839,12 @@ class _ErrorScreen extends StatelessWidget {
               color: AppColors.error,
             ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Something went wrong',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
+                color: AppColors.darkOnSurface,
               ),
             ),
             const SizedBox(height: 8),
@@ -1034,29 +860,4 @@ class _ErrorScreen extends StatelessWidget {
       ),
     );
   }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// CUSTOM PAINTERS
-// ═══════════════════════════════════════════════════════════════════════════
-class _GridPatternPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.05)
-      ..strokeWidth = 1;
-
-    const spacing = 30.0;
-
-    for (double i = 0; i < size.width + size.height; i += spacing) {
-      canvas.drawLine(
-        Offset(i, 0),
-        Offset(0, i),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

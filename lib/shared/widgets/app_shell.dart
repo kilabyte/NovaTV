@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../config/router/routes.dart';
 import '../../config/theme/app_colors.dart';
+import '../../core/utils/app_logger.dart';
+import '../../features/epg/presentation/providers/epg_providers.dart';
 import '../../features/player/presentation/providers/player_providers.dart';
 import '../../features/player/presentation/widgets/mini_player.dart';
 import '../../features/playlist/presentation/providers/playlist_providers.dart';
@@ -27,6 +29,46 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   int _mobileSelectedIndex = 0;
+  bool _hasCheckedAutoRefresh = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Check for auto-refresh on app startup (delayed to allow providers to initialize)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAutoRefresh();
+    });
+  }
+
+  /// Check if playlists or EPG need auto-refresh on app startup
+  Future<void> _checkAutoRefresh() async {
+    if (_hasCheckedAutoRefresh) return;
+    _hasCheckedAutoRefresh = true;
+
+    AppLogger.info('Checking for auto-refresh on startup...');
+
+    // Get all playlists
+    final playlistsAsync = ref.read(playlistsProvider);
+
+    playlistsAsync.whenData((playlists) async {
+      for (final playlist in playlists) {
+        // Check if playlist needs refresh
+        if (playlist.autoRefresh && playlist.needsRefresh) {
+          AppLogger.info('Auto-refreshing playlist: ${playlist.name}');
+          await ref.read(playlistNotifierProvider.notifier).refreshPlaylist(playlist.id);
+        }
+
+        // Check if EPG needs refresh
+        if (playlist.hasEpg && playlist.autoRefresh && playlist.needsRefresh) {
+          AppLogger.info('Auto-refreshing EPG for playlist: ${playlist.name}');
+          await ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(
+            playlist.id,
+            playlist.epgUrl!,
+          );
+        }
+      }
+    });
+  }
 
   int _calculateSelectedIndex(BuildContext context) {
     final location = GoRouterState.of(context).uri.path;

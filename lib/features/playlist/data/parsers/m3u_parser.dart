@@ -1,12 +1,8 @@
-import 'package:uuid/uuid.dart';
-
 import '../../../../core/error/exceptions.dart';
 import '../../domain/entities/channel.dart';
 
 /// Parser for M3U and M3U8 playlist files with extended attributes
 class M3UParser {
-  static const _uuid = Uuid();
-
   // EXTINF pattern: #EXTINF:duration tvg-attributes,channel-name
   static final _extinfPattern = RegExp(
     r'^#EXTINF:\s*(-?\d+)\s*(.*?),\s*(.*)$',
@@ -237,8 +233,10 @@ class M3UParser {
     final catchupDaysMatch = _catchupDaysPattern.firstMatch(attributes);
     final catchupDays = catchupDaysMatch != null ? int.tryParse(catchupDaysMatch.group(1) ?? '') : null;
 
-    // Generate unique ID using UUID or tvg-id if available
-    final id = tvgId?.isNotEmpty == true ? '${playlistId}_$tvgId' : '${playlistId}_${_uuid.v4()}';
+    // Generate unique ID using playlist ID and channel index
+    // We use channel index because tvg-id can be duplicated across different groups
+    // The tvgId field is preserved separately for EPG matching
+    final id = '${playlistId}_$channelIndex';
 
     return Channel(
       id: id,

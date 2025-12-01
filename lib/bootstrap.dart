@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:logger/logger.dart';
 import 'package:media_kit/media_kit.dart';
 
+import 'core/services/window_service.dart';
 import 'core/storage/hive_storage.dart';
 import 'core/utils/app_logger.dart';
 
@@ -38,6 +39,11 @@ Future<void> bootstrap() async {
   AppLogger.debug('Initializing Hive storage...');
   final storage = HiveStorage();
   await storage.init();
+
+  // Initialize window service (for window size persistence on desktop)
+  AppLogger.debug('Initializing window service...');
+  final windowService = WindowService();
+  await windowService.init();
 
   // Set log level based on build mode
   if (kReleaseMode) {

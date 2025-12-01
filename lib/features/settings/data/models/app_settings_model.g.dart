@@ -31,13 +31,14 @@ class AppSettingsModelAdapter extends TypeAdapter<AppSettingsModel> {
       defaultChannelView: fields[9] == null ? 'grid' : fields[9] as String,
       rememberLastChannel: fields[10] == null ? true : fields[10] as bool,
       lastPlayedChannelId: fields[11] as String?,
+      lastTvGuideCategory: fields[12] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, AppSettingsModel obj) {
     writer
-      ..writeByte(12)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.themeMode)
       ..writeByte(1)
@@ -61,7 +62,9 @@ class AppSettingsModelAdapter extends TypeAdapter<AppSettingsModel> {
       ..writeByte(10)
       ..write(obj.rememberLastChannel)
       ..writeByte(11)
-      ..write(obj.lastPlayedChannelId);
+      ..write(obj.lastPlayedChannelId)
+      ..writeByte(12)
+      ..write(obj.lastTvGuideCategory);
   }
 
   @override

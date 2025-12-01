@@ -1,236 +1,224 @@
 import 'package:flutter/material.dart';
 
-/// NovaTV Color Palette - TiViMate/iMPlayer Inspired
+/// NovaTV Clean Design Color Palette
 ///
-/// Design Philosophy: Content-first, cable TV familiar, OLED optimized
-/// Inspired by TiViMate's clean interface and iMPlayer's smooth navigation
+/// Design Philosophy: Modern utility-focused, no gradients
+/// - Solid dark surfaces
+/// - Single accent color (cyan)
+/// - Clean typography hierarchy
+/// - Professional and minimal
 class AppColors {
   AppColors._();
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PRIMARY BRAND COLORS - TiViMate-inspired teal accent
+  // PRIMARY ACCENT - Single cyan accent
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /// Primary accent - Vibrant teal (TiViMate inspired)
-  static const Color primary = Color(0xFF00BCD4);
-  static const Color primaryLight = Color(0xFF4DD0E1);
-  static const Color primaryDark = Color(0xFF0097A7);
-  static const Color primaryMuted = Color(0xFF00838F);
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SECONDARY / ACCENT COLORS
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  /// Secondary accent - Warm orange for highlights
-  static const Color secondary = Color(0xFFFF9800);
-  static const Color secondaryLight = Color(0xFFFFB74D);
-  static const Color secondaryDark = Color(0xFFF57C00);
-
-  /// Category accent colors
-  static const Color accent = Color(0xFFE53935);
-  static const Color accentPurple = Color(0xFF8E24AA);
-  static const Color accentPink = Color(0xFFD81B60);
-  static const Color accentBlue = Color(0xFF1E88E5);
-  static const Color accentGreen = Color(0xFF43A047);
-  static const Color accentYellow = Color(0xFFFDD835);
-
-  // Gradients for featured content
-  static const List<Color> gradientPrimary = [
-    Color(0xFF00BCD4),
-    Color(0xFF0097A7),
-  ];
-  static const List<Color> gradientAccent = [
-    Color(0xFFE53935),
-    Color(0xFFFF9800),
-  ];
+  static const Color primary = Color(0xFF00D4FF);
+  static const Color primaryDark = Color(0xFF00A8CC);
+  static const Color primaryMuted = Color(0xFF0088AA);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SEMANTIC COLORS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  static const Color error = Color(0xFFE53935);
-  static const Color errorLight = Color(0xFFEF5350);
-  static const Color errorDark = Color(0xFFC62828);
-
-  static const Color success = Color(0xFF43A047);
-  static const Color successLight = Color(0xFF66BB6A);
-  static const Color successDark = Color(0xFF2E7D32);
-
-  static const Color warning = Color(0xFFFF9800);
-  static const Color warningLight = Color(0xFFFFB74D);
-  static const Color warningDark = Color(0xFFF57C00);
-
-  static const Color live = Color(0xFFE53935);
+  static const Color error = Color(0xFFFF453A);
+  static const Color success = Color(0xFF30D158);
+  static const Color warning = Color(0xFFFF9F0A);
+  static const Color live = Color(0xFFFF453A);
+  static const Color favorite = Color(0xFFFFD60A);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // DARK THEME - OLED OPTIMIZED (TiViMate style)
-  // True blacks for OLED + clean content-first look
+  // DARK THEME - Clean solid colors
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /// True black background - OLED optimized
-  static const Color darkBackground = Color(0xFF000000);
+  /// Main background - pure dark
+  static const Color background = Color(0xFF0A0A0A);
 
-  /// Sidebar background - slightly elevated
-  static const Color darkSidebar = Color(0xFF0D0D0D);
+  /// Sidebar background
+  static const Color sidebar = Color(0xFF141414);
 
-  /// Surface colors - card backgrounds
-  static const Color darkSurface = Color(0xFF121212);
-  static const Color darkSurfaceElevated = Color(0xFF1A1A1A);
-  static const Color darkSurfaceVariant = Color(0xFF1E1E1E);
-  static const Color darkSurfaceHover = Color(0xFF2A2A2A);
-  static const Color darkSurfaceActive = Color(0xFF333333);
+  /// Content area background
+  static const Color surface = Color(0xFF1A1A1A);
 
-  /// Text colors
-  static const Color darkOnBackground = Color(0xFFFFFFFF);
-  static const Color darkOnSurface = Color(0xFFF5F5F5);
-  static const Color darkOnSurfaceVariant = Color(0xFFB3B3B3);
-  static const Color darkOnSurfaceMuted = Color(0xFF757575);
-  static const Color darkOnSurfaceDisabled = Color(0xFF4A4A4A);
+  /// Elevated surfaces (cards, modals)
+  static const Color surfaceElevated = Color(0xFF242424);
 
-  /// Border and divider colors
-  static const Color darkBorder = Color(0xFF2A2A2A);
-  static const Color darkBorderLight = Color(0xFF333333);
-  static const Color darkDivider = Color(0xFF1F1F1F);
+  /// Hover states
+  static const Color surfaceHover = Color(0xFF2A2A2A);
+
+  /// Active/pressed states
+  static const Color surfaceActive = Color(0xFF333333);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // LIGHT THEME
+  // TEXT COLORS - Clear hierarchy
   // ═══════════════════════════════════════════════════════════════════════════
 
-  static const Color lightBackground = Color(0xFFFAFAFA);
-  static const Color lightSurface = Color(0xFFFFFFFF);
-  static const Color lightSurfaceElevated = Color(0xFFFFFFFF);
-  static const Color lightSurfaceVariant = Color(0xFFF5F5F5);
-  static const Color lightOnBackground = Color(0xFF0A0A0A);
-  static const Color lightOnSurface = Color(0xFF171717);
-  static const Color lightOnSurfaceVariant = Color(0xFF525252);
-  static const Color lightOnSurfaceMuted = Color(0xFF737373);
-  static const Color lightBorder = Color(0xFFE5E5E5);
-  static const Color lightDivider = Color(0xFFF0F0F0);
+  static const Color textPrimary = Color(0xFFFFFFFF);
+  static const Color textSecondary = Color(0xFFAAAAAA);
+  static const Color textMuted = Color(0xFF666666);
+  static const Color textDisabled = Color(0xFF444444);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // EPG / TV GUIDE COLORS - Cable TV inspired
+  // BORDERS & DIVIDERS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /// Currently airing program highlight
-  static const Color epgNow = Color(0xFF00BCD4);
-  static const Color epgNowBackground = Color(0xFF002D33);
+  static const Color border = Color(0xFF2A2A2A);
+  static const Color borderLight = Color(0xFF3A3A3A);
+  static const Color divider = Color(0xFF1F1F1F);
 
-  /// Past programs - dimmed
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EPG / PROGRAM GUIDE
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  static const Color epgNow = Color(0xFF00D4FF);
+  static const Color epgNowBg = Color(0xFF0D2A33);
   static const Color epgPast = Color(0xFF1A1A1A);
-  static const Color epgPastText = Color(0xFF5A5A5A);
-
-  /// Future programs
-  static const Color epgFuture = Color(0xFF1E1E1E);
-
-  /// Time indicator line (current time)
-  static const Color epgTimeIndicator = Color(0xFFFF5722);
-  static const Color epgNowIndicator = Color(0xFFFF5722);
-
-  /// Selected program highlight
-  static const Color epgSelected = Color(0xFF00838F);
-  static const Color epgCurrentProgram = Color(0xFF00BCD4);
-  static const Color epgPastProgram = Color(0xFF1A1A1A);
-  static const Color epgFutureProgram = Color(0xFF1E1E1E);
-  static const Color epgTimeHeader = Color(0xFF0D0D0D);
+  static const Color epgPastText = Color(0xFF555555);
+  static const Color epgFuture = Color(0xFF242424);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SIDEBAR & NAVIGATION - TiViMate style
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  /// Sidebar item selected
-  static const Color sidebarSelected = Color(0xFF00BCD4);
-  static const Color sidebarSelectedBg = Color(0xFF002D33);
-
-  /// Sidebar item hover
-  static const Color sidebarHover = Color(0xFF1A1A1A);
-
-  /// Group category colors (for visual distinction)
-  static const List<Color> groupColors = [
-    Color(0xFF1E88E5), // Blue - All/General
-    Color(0xFFE53935), // Red - Sports
-    Color(0xFF43A047), // Green - News
-    Color(0xFF8E24AA), // Purple - Movies
-    Color(0xFFFF9800), // Orange - Entertainment
-    Color(0xFFD81B60), // Pink - Kids
-    Color(0xFF00ACC1), // Cyan - Documentary
-    Color(0xFFFDD835), // Yellow - Music
-  ];
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // VIDEO PLAYER COLORS
+  // PLAYER
   // ═══════════════════════════════════════════════════════════════════════════
 
   static const Color playerBackground = Color(0xFF000000);
-  static const Color playerOverlay = Color(0xB3000000);
-  static const Color playerOverlayLight = Color(0x66000000);
+  static const Color playerOverlay = Color(0x99000000);
   static const Color playerControls = Color(0xFFFFFFFF);
-  static const Color playerProgress = Color(0xFF00BCD4);
-  static const Color playerBuffer = Color(0x4D00BCD4);
-  static const Color playerLive = Color(0xFFE53935);
-
-  /// Player overlay gradients
-  static const Color playerOverlayTop = Color(0xCC000000);
-  static const Color playerOverlayBottom = Color(0xE6000000);
-
-  /// Progress bar
-  static const Color progressBackground = Color(0xFF333333);
-  static const Color progressBuffered = Color(0xFF666666);
-  static const Color progressPlayed = Color(0xFF00BCD4);
+  static const Color playerProgress = Color(0xFF00D4FF);
+  static const Color playerBuffer = Color(0x4DFFFFFF);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // CHANNEL COLORS
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  /// Channel logo placeholder
-  static const Color logoPlaceholder = Color(0xFF2A2A2A);
-
-  /// Favorite/starred
-  static const Color favorite = Color(0xFFFFB300);
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SHIMMER / LOADING COLORS
+  // LOADING / SHIMMER
   // ═══════════════════════════════════════════════════════════════════════════
 
   static const Color shimmerBase = Color(0xFF1A1A1A);
   static const Color shimmerHighlight = Color(0xFF2A2A2A);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // GLASSMORPHISM COLORS (minimal use)
+  // BACKWARDS COMPATIBILITY - Map old names to new
   // ═══════════════════════════════════════════════════════════════════════════
 
-  static const Color glassBackground = Color(0x1AFFFFFF);
-  static const Color glassBorder = Color(0x33FFFFFF);
-  static const Color glassBackgroundDark = Color(0x33000000);
-  static const Color glassBorderDark = Color(0x1A000000);
+  // Old liquid glass names mapped to new solid colors
+  static const Color darkBackground = background;
+  static const Color darkBase = background;
+  static const Color darkSurface = surface;
+  static const Color darkSurfaceElevated = surfaceElevated;
+  static const Color darkSurfaceVariant = surfaceElevated;
+  static const Color darkSurfaceHover = surfaceHover;
+  static const Color darkSurfaceActive = surfaceActive;
+  static const Color darkSidebar = sidebar;
+  static const Color darkOnBackground = textPrimary;
+  static const Color darkOnSurface = textPrimary;
+  static const Color darkOnSurfaceVariant = textSecondary;
+  static const Color darkOnSurfaceMuted = textMuted;
+  static const Color darkOnSurfaceDisabled = textDisabled;
+  static const Color darkBorder = border;
+  static const Color darkBorderLight = borderLight;
+  static const Color darkDivider = divider;
+
+  // Glass colors - now just subtle opacity
+  static const Color glassBackground = Color(0x0DFFFFFF);
+  static const Color glassBackgroundLight = Color(0x1AFFFFFF);
+  static const Color glassBackgroundMedium = Color(0x26FFFFFF);
+  static const Color glassBackgroundHeavy = Color(0x33FFFFFF);
+  static const Color glassBorder = Color(0x1AFFFFFF);
+  static const Color glassBorderLight = Color(0x26FFFFFF);
+  static const Color glassBorderGlow = Color(0x33FFFFFF);
+  static const Color glassCyan = Color(0x1A00D4FF);
+
+  // Old accent colors for compatibility
+  static const Color secondary = Color(0xFFFF9F0A);
+  static const Color secondaryLight = Color(0xFFFFBF60);
+  static const Color secondaryDark = Color(0xFFE68A00);
+  static const Color accent = Color(0xFFFF453A);
+  static const Color accentBlue = Color(0xFF007AFF);
+  static const Color accentGreen = Color(0xFF30D158);
+  static const Color accentPurple = Color(0xFFBF5AF2);
+  static const Color accentPink = Color(0xFFFF2D55);
+  static const Color accentOrange = Color(0xFFFF9F0A);
+  static const Color accentYellow = Color(0xFFFFD60A);
+  static const Color accentMint = Color(0xFF00C7BE);
+  static const Color accentIndigo = Color(0xFF5856D6);
+
+  // Aurora colors - keeping for any remaining uses
+  static const Color auroraCyan = primary;
+  static const Color auroraPurple = accentPurple;
+  static const Color auroraMagenta = accentPink;
+  static const Color auroraBlue = accentBlue;
+  static const Color auroraOrange = accentOrange;
+
+  // EPG compatibility
+  static const Color epgSelected = primaryDark;
+  static const Color epgCurrentProgram = epgNow;
+  static const Color epgPastProgram = epgPast;
+  static const Color epgFutureProgram = epgFuture;
+  static const Color epgTimeHeader = sidebar;
+  static const Color epgTimeIndicator = warning;
+  static const Color epgNowIndicator = warning;
+  static const Color epgNowBackground = epgNowBg;
+
+  // Navigation
+  static const Color sidebarSelected = primary;
+  static const Color sidebarSelectedBg = Color(0xFF1A2A30);
+  static const Color sidebarHover = surfaceHover;
+  static const Color navBarGlass = glassBackground;
+  static const Color navBarBorder = glassBorder;
+  static const Color navPillBackground = Color(0x3300D4FF);
+  static const Color navPillBorder = Color(0x4D00D4FF);
+
+  // Player compatibility
+  static const Color playerOverlayLight = Color(0x4D000000);
+  static const Color playerGlassBar = Color(0x33FFFFFF);
+  static const Color playerGlassBorder = Color(0x1AFFFFFF);
+  static const Color playerOverlayTop = Color(0xB3000000);
+  static const Color playerOverlayBottom = Color(0xE6000000);
+  static const Color progressBackground = Color(0x33FFFFFF);
+  static const Color progressBuffered = playerBuffer;
+  static const Color progressPlayed = playerProgress;
+  static const Color playerLive = live;
+
+  // Other
+  static const Color logoPlaceholder = surfaceElevated;
+  static const Color primaryLight = Color(0xFF5CE1FF);
+
+  // Category colors
+  static const Color categoryMovies = accentPurple;
+  static const Color categorySports = error;
+  static const Color categoryNews = accentBlue;
+  static const Color categoryKids = accentOrange;
+  static const Color categoryMusic = accentPink;
+  static const Color categoryDocumentary = accentMint;
+  static const Color categoryEntertainment = success;
+
+  // Light theme (keeping for completeness)
+  static const Color lightBackground = Color(0xFFF5F5F5);
+  static const Color lightSurface = Color(0xFFFFFFFF);
+  static const Color lightSurfaceElevated = Color(0xFFFFFFFF);
+  static const Color lightSurfaceVariant = Color(0xFFF0F0F0);
+  static const Color lightOnBackground = Color(0xFF0A0A0A);
+  static const Color lightOnSurface = Color(0xFF1A1A1A);
+  static const Color lightOnSurfaceVariant = Color(0xFF505050);
+  static const Color lightOnSurfaceMuted = Color(0xFF707070);
+  static const Color lightBorder = Color(0xFFE0E0E0);
+  static const Color lightDivider = Color(0xFFF0F0F0);
+
+  // Group colors for channel categories
+  static const List<Color> groupColors = [
+    Color(0xFF007AFF), // Blue
+    Color(0xFFFF453A), // Red
+    Color(0xFF30D158), // Green
+    Color(0xFFBF5AF2), // Purple
+    Color(0xFFFF9F0A), // Orange
+    Color(0xFFFF2D55), // Pink
+    Color(0xFF00C7BE), // Mint
+    Color(0xFFFFD60A), // Yellow
+  ];
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // CATEGORY / GENRE COLORS
+  // GRADIENTS - Kept for backwards compatibility but simplified
   // ═══════════════════════════════════════════════════════════════════════════
 
-  static const Color categoryMovies = Color(0xFF8E24AA);
-  static const Color categorySports = Color(0xFFE53935);
-  static const Color categoryNews = Color(0xFF1E88E5);
-  static const Color categoryKids = Color(0xFFFF9800);
-  static const Color categoryMusic = Color(0xFFD81B60);
-  static const Color categoryDocumentary = Color(0xFF00ACC1);
-  static const Color categoryEntertainment = Color(0xFF43A047);
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // GRADIENTS
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  static const LinearGradient primaryGradient = LinearGradient(
-    colors: [primary, primaryDark],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
-  static const LinearGradient surfaceGradient = LinearGradient(
-    colors: [Color(0xFF1A1A1A), Color(0xFF0D0D0D)],
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-  );
-
+  // These are still needed for player overlays
   static const LinearGradient playerTopGradient = LinearGradient(
     colors: [playerOverlayTop, Colors.transparent],
     begin: Alignment.topCenter,
@@ -241,5 +229,50 @@ class AppColors {
     colors: [Colors.transparent, playerOverlayBottom],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
+  );
+
+  // Deprecated gradients - keeping to avoid breaking existing code
+  @Deprecated('Use solid colors instead')
+  static const LinearGradient primaryGradient = LinearGradient(
+    colors: [primary, primaryDark],
+  );
+
+  @Deprecated('Use solid colors instead')
+  static const LinearGradient auroraVibrantGradient = LinearGradient(
+    colors: [primary, accentPurple],
+  );
+
+  @Deprecated('Use solid colors instead')
+  static const LinearGradient glassGradient = LinearGradient(
+    colors: [glassBackground, glassBackground],
+  );
+
+  @Deprecated('Use solid colors instead')
+  static const LinearGradient glassBorderGradient = LinearGradient(
+    colors: [glassBorder, glassBorder],
+  );
+
+  @Deprecated('Use solid colors instead')
+  static const LinearGradient surfaceGradient = LinearGradient(
+    colors: [surface, surface],
+  );
+
+  @Deprecated('Use solid colors instead')
+  static const LinearGradient auroraBackgroundGradient = LinearGradient(
+    colors: [background, background],
+  );
+
+  static const List<Color> auroraGradientDark = [background];
+  static const List<Color> auroraGradientVibrant = [primary];
+  static const List<Color> gradientPrimary = [primary, primaryDark];
+
+  @Deprecated('Use solid colors instead')
+  static const RadialGradient cyanGlow = RadialGradient(
+    colors: [glassCyan, Colors.transparent],
+  );
+
+  @Deprecated('Use solid colors instead')
+  static const RadialGradient purpleGlow = RadialGradient(
+    colors: [Color(0x1ABF5AF2), Colors.transparent],
   );
 }

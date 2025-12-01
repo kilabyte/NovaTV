@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../features/channels/presentation/screens/channel_list_screen.dart';
 import '../../features/epg/presentation/screens/tv_guide_screen.dart';
 import '../../features/favorites/presentation/screens/favorites_screen.dart';
-import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/player/presentation/screens/player_screen.dart';
 import '../../features/playlist/presentation/screens/add_playlist_screen.dart';
 import '../../features/playlist/presentation/screens/playlist_manager_screen.dart';
@@ -17,46 +16,49 @@ import 'routes.dart';
 /// Application router configuration using go_router
 /// Features premium page transitions for a cinematic experience
 final GoRouter appRouter = GoRouter(
-  initialLocation: Routes.home,
+  initialLocation: Routes.channels, // Start directly at channels
   debugLogDiagnostics: true,
   routes: [
-    // Main shell route with bottom navigation
+    // Main shell route with sidebar navigation
     ShellRoute(
       builder: (context, state, child) => AppShell(child: child),
       routes: [
+        // Redirect home to channels
         GoRoute(
           path: Routes.home,
           name: 'home',
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: HomeScreen(),
-          ),
+          redirect: (context, state) => Routes.channels,
         ),
         GoRoute(
           path: Routes.channels,
           name: 'channels',
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: ChannelListScreen(),
+          pageBuilder: (context, state) => FadeThroughTransition(
+            key: state.pageKey,
+            child: const ChannelListScreen(),
           ),
         ),
         GoRoute(
           path: Routes.tvGuide,
           name: 'tvGuide',
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: TvGuideScreen(),
+          pageBuilder: (context, state) => FadeThroughTransition(
+            key: state.pageKey,
+            child: const TvGuideScreen(),
           ),
         ),
         GoRoute(
           path: Routes.favorites,
           name: 'favorites',
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: FavoritesScreen(),
+          pageBuilder: (context, state) => FadeThroughTransition(
+            key: state.pageKey,
+            child: const FavoritesScreen(),
           ),
         ),
         GoRoute(
           path: Routes.playlists,
           name: 'playlists',
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: PlaylistManagerScreen(),
+          pageBuilder: (context, state) => FadeThroughTransition(
+            key: state.pageKey,
+            child: const PlaylistManagerScreen(),
           ),
           routes: [
             GoRoute(
@@ -72,8 +74,9 @@ final GoRouter appRouter = GoRouter(
         GoRoute(
           path: Routes.settings,
           name: 'settings',
-          pageBuilder: (context, state) => const NoTransitionPage(
-            child: SettingsScreen(),
+          pageBuilder: (context, state) => FadeThroughTransition(
+            key: state.pageKey,
+            child: const SettingsScreen(),
           ),
         ),
         GoRoute(

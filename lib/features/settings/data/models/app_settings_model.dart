@@ -40,6 +40,9 @@ class AppSettingsModel extends HiveObject {
   @HiveField(11)
   final String? lastPlayedChannelId;
 
+  @HiveField(12)
+  final String? lastTvGuideCategory;
+
   AppSettingsModel({
     this.themeMode = 'dark',
     this.autoRefreshPlaylists = false,
@@ -53,6 +56,7 @@ class AppSettingsModel extends HiveObject {
     this.defaultChannelView = 'grid',
     this.rememberLastChannel = true,
     this.lastPlayedChannelId,
+    this.lastTvGuideCategory,
   });
 
   AppSettingsModel copyWith({
@@ -68,6 +72,8 @@ class AppSettingsModel extends HiveObject {
     String? defaultChannelView,
     bool? rememberLastChannel,
     String? lastPlayedChannelId,
+    String? lastTvGuideCategory,
+    bool clearLastTvGuideCategory = false,
   }) {
     return AppSettingsModel(
       themeMode: themeMode ?? this.themeMode,
@@ -82,6 +88,7 @@ class AppSettingsModel extends HiveObject {
       defaultChannelView: defaultChannelView ?? this.defaultChannelView,
       rememberLastChannel: rememberLastChannel ?? this.rememberLastChannel,
       lastPlayedChannelId: lastPlayedChannelId ?? this.lastPlayedChannelId,
+      lastTvGuideCategory: clearLastTvGuideCategory ? null : (lastTvGuideCategory ?? this.lastTvGuideCategory),
     );
   }
 }

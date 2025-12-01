@@ -297,3 +297,68 @@ class FavoriteNotifier extends StateNotifier<AsyncValue<void>> {
 final favoriteNotifierProvider = StateNotifierProvider<FavoriteNotifier, AsyncValue<void>>((ref) {
   return FavoriteNotifier(ref);
 });
+
+/// Check if a channel is a favorite
+final isFavoriteProvider = FutureProvider.family<bool, String>((ref, channelId) async {
+  final favorites = await ref.watch(favoriteChannelsProvider.future);
+  return favorites.any((channel) => channel.id == channelId);
+});
+
+/// Toggle favorite for a channel (returns a provider that triggers the toggle)
+final toggleFavoriteProvider = Provider.family<void, String>((ref, channelId) {
+  ref.read(favoriteNotifierProvider.notifier).toggleFavorite(channelId);
+});
+
+/// Recently watched channels tracking
+/// Stores channel IDs in order of most recently watched (most recent first)
+class RecentlyWatchedNotifier extends StateNotifier<List<String>> {
+  static const int maxRecentChannels = 10;
+
+  RecentlyWatchedNotifier() : super([]);
+
+  /// Add a channel to recently watched (moves to front if already exists)
+  void addChannel(String channelId) {
+    final newList = state.where((id) => id != channelId).toList();
+    newList.insert(0, channelId);
+
+    // Keep only the most recent N channels
+    if (newList.length > maxRecentChannels) {
+      newList.removeRange(maxRecentChannels, newList.length);
+    }
+
+    state = newList;
+  }
+
+  /// Clear all recently watched
+  void clear() {
+    state = [];
+  }
+}
+
+final recentlyWatchedNotifierProvider =
+    StateNotifierProvider<RecentlyWatchedNotifier, List<String>>((ref) {
+  return RecentlyWatchedNotifier();
+});
+
+/// Provider for recently watched channels (as Channel objects)
+final recentlyWatchedChannelsProvider = FutureProvider<List<Channel>>((ref) async {
+  final recentIds = ref.watch(recentlyWatchedNotifierProvider);
+  if (recentIds.isEmpty) return [];
+
+  final repository = ref.watch(playlistRepositoryProvider);
+  final allChannelsResult = await repository.getAllChannels();
+
+  return allChannelsResult.fold(
+    (failure) => [],
+    (allChannels) {
+      // Create a map for quick lookup
+      final channelMap = {for (var c in allChannels) c.id: c};
+
+      // Return channels in the order of recently watched
+      return recentIds
+          .map((id) => channelMap[id])
+          .whereType<Channel>()
+          .toList();
+    },
+  );
+});

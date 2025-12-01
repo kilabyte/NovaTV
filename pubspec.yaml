@@ -54,6 +54,15 @@ dependencies:
   # Icons
   cupertino_icons: ^1.0.8
 
+  # Window management (macOS/Windows/Linux)
+  window_manager: ^0.4.3
+
+  # Liquid Glass UI (macOS Tahoe style)
+  liquid_glass_bottom_bar: ^0.0.6
+
+  # Glassmorphism effects
+  glassmorphism: ^3.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

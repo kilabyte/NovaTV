@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../config/router/routes.dart';
 import '../../../../config/theme/app_colors.dart';
 import '../../../playlist/domain/entities/channel.dart';
 import '../../../playlist/presentation/providers/playlist_providers.dart';
 import '../../../epg/presentation/providers/epg_providers.dart';
+import '../../domain/entities/search_result.dart';
 
 /// Clean search screen with solid dark design
 class SearchScreen extends ConsumerStatefulWidget {
@@ -69,14 +71,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
           // Results Area
           Expanded(
-            child: query.isEmpty
+            child: query.isEmpty || query.length < 2
                 ? _buildEmptyState()
                 : searchResults.when(
-                    data: (channels) {
-                      if (channels.isEmpty) {
+                    data: (results) {
+                      if (results.isEmpty) {
                         return _buildNoResultsState();
                       }
-                      return _buildSearchResults(channels);
+                      return _buildSearchResults(results);
                     },
                     loading: () => const _LoadingState(),
                     error: (error, _) => _ErrorState(error: error.toString()),
@@ -149,7 +151,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     return const _NoResultsState();
   }
 
-  Widget _buildSearchResults(List<Channel> channels) {
+  Widget _buildSearchResults(List<SearchResult> results) {
+    // Count channels and programs
+    final channelCount = results.whereType<ChannelSearchResult>().length;
+    final programCount = results.whereType<ProgramSearchResult>().length;
+
+    String resultText;
+    if (channelCount > 0 && programCount > 0) {
+      resultText = '$channelCount channel${channelCount == 1 ? '' : 's'}, $programCount program${programCount == 1 ? '' : 's'}';
+    } else if (channelCount > 0) {
+      resultText = '$channelCount channel${channelCount == 1 ? '' : 's'}';
+    } else {
+      resultText = '$programCount program${programCount == 1 ? '' : 's'}';
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -157,7 +172,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
           child: Text(
-            '${channels.length} result${channels.length == 1 ? '' : 's'}',
+            resultText,
             style: TextStyle(
               fontSize: 13,
               color: AppColors.textMuted,
@@ -170,15 +185,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-            itemCount: channels.length,
+            itemCount: results.length,
             itemBuilder: (context, index) {
-              final channel = channels[index];
+              final result = results[index];
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: _SearchResultTile(
-                  channel: channel,
-                  onTap: () => _playChannel(channel),
-                  onFavorite: () => _toggleFavorite(channel.id),
+                  result: result,
+                  onTap: () => _playChannel(_getChannel(result)),
+                  onFavorite: () => _toggleFavorite(_getChannel(result).id),
                 ),
               );
             },
@@ -186,6 +201,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ),
       ],
     );
+  }
+
+  Channel _getChannel(SearchResult result) {
+    return switch (result) {
+      ChannelSearchResult(:final channel) => channel,
+      ProgramSearchResult(:final channel) => channel,
+    };
   }
 
   void _playChannel(Channel channel) {
@@ -292,12 +314,12 @@ class _SearchField extends StatelessWidget {
 // =============================================================================
 
 class _SearchResultTile extends ConsumerStatefulWidget {
-  final Channel channel;
+  final SearchResult result;
   final VoidCallback onTap;
   final VoidCallback onFavorite;
 
   const _SearchResultTile({
-    required this.channel,
+    required this.result,
     required this.onTap,
     required this.onFavorite,
   });
@@ -309,19 +331,20 @@ class _SearchResultTile extends ConsumerStatefulWidget {
 class _SearchResultTileState extends ConsumerState<_SearchResultTile> {
   bool _isHovered = false;
 
+  Channel get _channel => switch (widget.result) {
+    ChannelSearchResult(:final channel) => channel,
+    ProgramSearchResult(:final channel) => channel,
+  };
+
   @override
   Widget build(BuildContext context) {
     final favorites = ref.watch(favoriteChannelsProvider);
     final isFavorite = favorites.maybeWhen(
-      data: (favs) => favs.any((c) => c.id == widget.channel.id),
+      data: (favs) => favs.any((c) => c.id == _channel.id),
       orElse: () => false,
     );
 
-    // Get current program if available
-    final currentProgram = ref.watch(currentProgramProvider((
-      playlistId: widget.channel.playlistId,
-      channelId: widget.channel.epgId,
-    )));
+    final isProgramResult = widget.result is ProgramSearchResult;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -337,64 +360,20 @@ class _SearchResultTileState extends ConsumerState<_SearchResultTile> {
             border: Border.all(
               color: _isHovered
                   ? AppColors.primary.withValues(alpha: 0.5)
-                  : AppColors.border,
+                  : isProgramResult
+                      ? AppColors.primary.withValues(alpha: 0.3)
+                      : AppColors.border,
             ),
           ),
           child: Row(
             children: [
               // Channel Logo
-              _ChannelLogo(logoUrl: widget.channel.logoUrl),
+              _ChannelLogo(logoUrl: _channel.logoUrl),
               const SizedBox(width: 12),
 
-              // Channel Info
+              // Channel/Program Info
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.channel.name,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    // Show current program or group
-                    if (currentProgram.valueOrNull != null)
-                      Text(
-                        currentProgram.value!.title,
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 13,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      )
-                    else if (widget.channel.group != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceElevated,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Text(
-                          widget.channel.group!,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+                child: _buildInfo(isProgramResult),
               ),
 
               // Action Buttons
@@ -420,6 +399,144 @@ class _SearchResultTileState extends ConsumerState<_SearchResultTile> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildInfo(bool isProgramResult) {
+    if (isProgramResult) {
+      final programResult = widget.result as ProgramSearchResult;
+      final program = programResult.program;
+      final timeFormat = DateFormat.jm();
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Program title (main text)
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'SHOW',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  program.title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // Channel name and time
+          Row(
+            children: [
+              Text(
+                _channel.name,
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                ),
+              ),
+              Text(
+                ' • ${timeFormat.format(program.start)}',
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 13,
+                ),
+              ),
+              if (program.isCurrentlyAiring)
+                Container(
+                  margin: const EdgeInsets.only(left: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'LIVE',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    // Channel result - show current program if available
+    final currentProgram = ref.watch(currentProgramProvider((
+      playlistId: _channel.playlistId,
+      channelId: _channel.epgId,
+    )));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _channel.name,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 4),
+        // Show current program or group
+        if (currentProgram.valueOrNull != null)
+          Text(
+            currentProgram.value!.title,
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          )
+        else if (_channel.group != null)
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 2,
+            ),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceElevated,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Text(
+              _channel.group!,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -619,7 +736,7 @@ class _EmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             const Text(
-              'Search for channels',
+              'Search channels & shows',
               style: TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 20,
@@ -628,7 +745,7 @@ class _EmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Find channels by name, category,\nor current program',
+              'Find channels by name or category,\nor search TV shows by title',
               style: TextStyle(
                 color: AppColors.textSecondary,
                 fontSize: 14,

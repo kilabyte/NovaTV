@@ -44,6 +44,9 @@ abstract class EpgLocalDataSource {
 
   /// Clean up old programs (older than specified days)
   Future<void> cleanupOldPrograms({int daysToKeep = 7});
+
+  /// Search programs by title, description, or category
+  Future<List<Program>> searchPrograms(String playlistId, String query);
 }
 
 class EpgLocalDataSourceImpl implements EpgLocalDataSource {
@@ -177,5 +180,28 @@ class EpgLocalDataSourceImpl implements EpgLocalDataSource {
 
       await programsBox.deleteAll(keysToDelete);
     }
+  }
+
+  @override
+  Future<List<Program>> searchPrograms(String playlistId, String query) async {
+    final lowerQuery = query.toLowerCase();
+    final now = DateTime.now();
+    final programs = await getPrograms(playlistId);
+
+    // Search in title, description, and category
+    // Only return current or upcoming programs (not past ones)
+    return programs.where((p) {
+      // Skip programs that have already ended
+      if (p.end.isBefore(now)) return false;
+
+      final title = p.title.toLowerCase();
+      final description = p.description?.toLowerCase() ?? '';
+      final category = p.category?.toLowerCase() ?? '';
+
+      return title.contains(lowerQuery) ||
+          description.contains(lowerQuery) ||
+          category.contains(lowerQuery);
+    }).toList()
+      ..sort((a, b) => a.start.compareTo(b.start));
   }
 }

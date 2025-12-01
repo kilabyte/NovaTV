@@ -17,6 +17,7 @@ import '../../domain/usecases/search_channels.dart';
 import '../../domain/usecases/toggle_favorite.dart';
 import '../../../../core/usecase/usecase.dart';
 import '../../../epg/presentation/providers/epg_providers.dart';
+import '../../../search/domain/entities/search_result.dart';
 
 // Data source providers
 final dioProvider = Provider<Dio>((ref) {
@@ -130,16 +131,69 @@ final channelsByPlaylistProvider = FutureProvider.family<List<Channel>, String>(
 /// Provider for channel search
 final searchQueryProvider = StateProvider<String>((ref) => '');
 
-final searchResultsProvider = FutureProvider<List<Channel>>((ref) async {
+/// Combined search results provider that searches both channels and EPG programs
+final searchResultsProvider = FutureProvider<List<SearchResult>>((ref) async {
   final query = ref.watch(searchQueryProvider);
-  if (query.isEmpty) return [];
+  if (query.isEmpty || query.length < 2) return [];
 
-  final useCase = ref.watch(searchChannelsUseCaseProvider);
-  final result = await useCase(query);
-  return result.fold(
-    (failure) => throw Exception(failure.message),
-    (channels) => channels,
+  final results = <SearchResult>[];
+  final seenChannelIds = <String>{};
+
+  // Search channels first
+  final channelUseCase = ref.watch(searchChannelsUseCaseProvider);
+  final channelResult = await channelUseCase(query);
+  channelResult.fold(
+    (failure) {},
+    (channels) {
+      for (final channel in channels) {
+        results.add(ChannelSearchResult(channel));
+        seenChannelIds.add(channel.id);
+      }
+    },
   );
+
+  // Search EPG programs
+  final epgLocalDataSource = ref.watch(epgLocalDataSourceProvider);
+  final playlistRepository = ref.watch(playlistRepositoryProvider);
+
+  // Get all playlists to search their EPG data
+  final playlistsResult = await playlistRepository.getPlaylists();
+  await playlistsResult.fold(
+    (failure) async {},
+    (playlists) async {
+      // Get all channels for mapping program results
+      final allChannelsResult = await playlistRepository.getAllChannels();
+      final allChannels = allChannelsResult.fold(
+        (failure) => <Channel>[],
+        (channels) => channels,
+      );
+
+      // Create a map of EPG channel ID to Channel for quick lookup
+      final channelByEpgId = <String, Channel>{};
+      for (final channel in allChannels) {
+        channelByEpgId[channel.epgId] = channel;
+      }
+
+      for (final playlist in playlists) {
+        final programs = await epgLocalDataSource.searchPrograms(playlist.id, query);
+
+        for (final program in programs) {
+          // Find the channel for this program
+          final channel = channelByEpgId[program.channelId];
+          if (channel != null && !seenChannelIds.contains(channel.id)) {
+            results.add(ProgramSearchResult(
+              program: program,
+              channel: channel,
+            ));
+            // Only add first program match per channel to avoid duplicates
+            seenChannelIds.add(channel.id);
+          }
+        }
+      }
+    },
+  );
+
+  return results;
 });
 
 /// Provider for channel groups

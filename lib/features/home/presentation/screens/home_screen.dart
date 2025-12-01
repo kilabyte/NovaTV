@@ -294,7 +294,7 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
                           width: 48,
                           height: 48,
                           decoration: BoxDecoration(
-                            gradient: AppColors.auroraVibrantGradient,
+                            color: AppColors.primary,
                             borderRadius: BorderRadius.circular(24),
                           ),
                           child: const Icon(
@@ -974,7 +974,7 @@ class _GlassNowPlayingItemState extends ConsumerState<_GlassNowPlayingItem> {
               child: Container(
                 height: 4,
                 decoration: BoxDecoration(
-                  gradient: AppColors.auroraVibrantGradient,
+                  color: AppColors.primary,
                   borderRadius: BorderRadius.circular(2),
                   boxShadow: [
                     BoxShadow(
@@ -1017,7 +1017,7 @@ class _WelcomeScreen extends StatelessWidget {
                   width: 90,
                   height: 90,
                   decoration: BoxDecoration(
-                    gradient: AppColors.auroraVibrantGradient,
+                    color: AppColors.primary,
                     borderRadius: BorderRadius.circular(24),
                   ),
                   child: const Icon(

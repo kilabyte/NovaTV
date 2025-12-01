@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_ce/hive.dart';
 
 import '../../data/datasources/playlist_local_data_source.dart';
 import '../../data/datasources/playlist_remote_data_source.dart';
@@ -365,10 +366,31 @@ final toggleFavoriteProvider = Provider.family<void, String>((ref, channelId) {
 
 /// Recently watched channels tracking
 /// Stores channel IDs in order of most recently watched (most recent first)
+/// Persists to Hive for data persistence across app restarts
 class RecentlyWatchedNotifier extends StateNotifier<List<String>> {
   static const int maxRecentChannels = 10;
+  static const String _boxName = 'recently_watched';
+  static const String _key = 'channel_ids';
 
-  RecentlyWatchedNotifier() : super([]);
+  Box? _box;
+
+  RecentlyWatchedNotifier() : super([]) {
+    _loadFromHive();
+  }
+
+  /// Load recently watched from Hive storage
+  Future<void> _loadFromHive() async {
+    _box = await Hive.openBox(_boxName);
+    final stored = _box?.get(_key);
+    if (stored != null && stored is List) {
+      state = List<String>.from(stored);
+    }
+  }
+
+  /// Save to Hive storage
+  Future<void> _saveToHive() async {
+    await _box?.put(_key, state);
+  }
 
   /// Add a channel to recently watched (moves to front if already exists)
   void addChannel(String channelId) {
@@ -381,11 +403,13 @@ class RecentlyWatchedNotifier extends StateNotifier<List<String>> {
     }
 
     state = newList;
+    _saveToHive();
   }
 
   /// Clear all recently watched
   void clear() {
     state = [];
+    _saveToHive();
   }
 }
 

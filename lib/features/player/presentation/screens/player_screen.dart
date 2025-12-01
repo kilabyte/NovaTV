@@ -564,7 +564,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                   fontSize: 14,
                   height: 1.4,
                 ),
-                maxLines: 2,
+                maxLines: 5,
                 overflow: TextOverflow.ellipsis,
               ),
             ],

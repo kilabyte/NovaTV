@@ -96,7 +96,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       body: Column(
         children: [
           SizedBox(
-              height: MediaQuery.of(context).padding.top + kToolbarHeight + 44),
+              height: MediaQuery.of(context).padding.top + kToolbarHeight + 48),
           // Main content
           Expanded(
             child: channelsAsync.when(
@@ -119,7 +119,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     final selectedDate = ref.watch(selectedDateProvider);
 
     return PreferredSize(
-      preferredSize: const Size.fromHeight(kToolbarHeight + 44),
+      preferredSize: const Size.fromHeight(kToolbarHeight + 48),
       child: ClipRRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
@@ -134,18 +134,16 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
               ),
             ),
             child: SafeArea(
+              bottom: false,
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // App bar
+                  // App bar - no back button since this is a tab
                   SizedBox(
                     height: kToolbarHeight,
                     child: Row(
                       children: [
-                        IconButton(
-                          icon: Icon(Icons.arrow_back_rounded,
-                              color: AppColors.darkOnSurface),
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
+                        const SizedBox(width: 16),
                         Expanded(
                           child: Text(
                             'TV Guide',

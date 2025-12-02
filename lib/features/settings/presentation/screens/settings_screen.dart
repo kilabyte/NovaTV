@@ -879,7 +879,7 @@ class _AboutTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'NovaTV',
+                'NovaIPTV',
                 style: TextStyle(
                   color: AppColors.textPrimary,
                   fontSize: 17,

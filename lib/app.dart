@@ -14,6 +14,7 @@ class NovaApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
+    final router = ref.watch(appRouterProvider);
 
     return ScreenUtilInit(
       designSize: const Size(375, 812), // iPhone X design size
@@ -30,7 +31,7 @@ class NovaApp extends ConsumerWidget {
           themeMode: themeMode,
 
           // Router configuration
-          routerConfig: appRouter,
+          routerConfig: router,
 
           // Builder for global overlays
           builder: (context, child) {

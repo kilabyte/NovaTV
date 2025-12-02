@@ -2,6 +2,8 @@ import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'local_storage.dart';
 import '../constants/storage_keys.dart';
 import '../../hive_registrar.g.dart';
+import '../../features/playlist/data/models/playlist_model.dart';
+import '../../features/settings/data/models/app_settings_model.dart';
 
 /// Hive implementation of local storage
 class HiveStorage implements LocalStorage {
@@ -13,6 +15,11 @@ class HiveStorage implements LocalStorage {
 
     // Register all Hive adapters using the generated registrar
     Hive.registerAdapters();
+
+    // Pre-open essential boxes that are needed immediately at app startup
+    // This ensures they're available when the router is created
+    await Hive.openBox<PlaylistModel>('playlists');
+    await Hive.openBox<AppSettingsModel>('app_settings');
   }
 
   Future<Box<T>> _getBox<T>(String boxName) async {

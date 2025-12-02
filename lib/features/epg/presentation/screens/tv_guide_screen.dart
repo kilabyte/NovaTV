@@ -535,6 +535,8 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       child: ListView.builder(
         controller: _channelColumnController,
         itemCount: channels.length,
+        // Add itemExtent for better ListView performance (fixed height rows)
+        itemExtent: _rowHeight,
         itemBuilder: (context, index) {
           final channel = channels[index];
           return _ChannelTile(
@@ -567,24 +569,29 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
         child: ListView.builder(
           controller: _programGridVerticalController,
           itemCount: channels.length,
+          // Add itemExtent for better ListView performance (fixed height rows)
+          itemExtent: _rowHeight,
           itemBuilder: (context, index) {
             final channel = channels[index];
             final programs = programsByChannel[channel.tvgId] ??
                 programsByChannel[channel.id] ??
                 [];
 
-            return Container(
-              height: _rowHeight,
-              width: totalWidth,
-              clipBehavior: Clip.hardEdge,
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    color: AppColors.border.withValues(alpha: 0.5),
+            // Wrap each row in RepaintBoundary to isolate repaints
+            return RepaintBoundary(
+              child: Container(
+                height: _rowHeight,
+                width: totalWidth,
+                clipBehavior: Clip.hardEdge,
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: AppColors.border.withValues(alpha: 0.5),
+                    ),
                   ),
                 ),
+                child: _buildProgramRow(context, channel, programs, startTime, endTime),
               ),
-              child: _buildProgramRow(context, channel, programs, startTime, endTime),
             );
           },
         ),
@@ -621,6 +628,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
 
     final widgets = <Widget>[];
     var currentTime = gridStart;
+    var currentPosition = 0.0;  // Track cumulative position in pixels
 
     for (final program in visiblePrograms) {
       if (program.start.isAfter(currentTime)) {
@@ -628,6 +636,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
         final gapWidth = _durationToWidth(gapDuration);
         if (gapWidth > 0) {
           widgets.add(_buildGap(gapWidth));
+          currentPosition += gapWidth;
         }
       }
 
@@ -638,13 +647,22 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       final duration = displayEnd.difference(displayStart);
       final cellWidth = _durationToWidth(duration);
 
+      // Calculate how much of the program extends left of the visible grid
+      final hiddenLeftWidth = program.start.isBefore(gridStart)
+          ? _durationToWidth(gridStart.difference(program.start))
+          : 0.0;
+
       if (cellWidth > 0) {
         widgets.add(_ProgramCell(
           program: program,
           width: cellWidth,
           height: _rowHeight,
           onTap: () => _showProgramDetails(context, program, channel),
+          programStartOffset: currentPosition,
+          hiddenLeftWidth: hiddenLeftWidth,
+          scrollController: _programGridController,
         ));
+        currentPosition += cellWidth;
       }
 
       currentTime = program.end;
@@ -1197,12 +1215,18 @@ class _ProgramCell extends StatefulWidget {
   final double width;
   final double height;
   final VoidCallback onTap;
+  final double programStartOffset;    // Cell's position in grid (pixels)
+  final double hiddenLeftWidth;       // How much extends left of grid start
+  final ScrollController? scrollController;
 
   const _ProgramCell({
     required this.program,
     required this.width,
     required this.height,
     required this.onTap,
+    this.programStartOffset = 0,
+    this.hiddenLeftWidth = 0,
+    this.scrollController,
   });
 
   @override
@@ -1211,12 +1235,58 @@ class _ProgramCell extends StatefulWidget {
 
 class _ProgramCellState extends State<_ProgramCell> {
   bool _isHovered = false;
+  double _lastCalculatedOffset = 0.0;
+
+  // Cache DateFormat to avoid recreating on every build
+  static final DateFormat _timeFormat = DateFormat.jm();
+
+  // Threshold for offset changes to trigger rebuild (pixels)
+  static const double _offsetThreshold = 8.0;
+
+  /// Calculate how much to offset the text based on current scroll position
+  /// Uses threshold to avoid excessive rebuilds - only returns new value when
+  /// change is significant enough to warrant a repaint
+  double _calculateTextOffset(double scrollOffset) {
+    const double minCellWidthForOffset = 80.0;
+    const double minVisibleTextSpace = 60.0;
+    const double textPadding = 10.0;
+
+    // Don't offset for very narrow cells
+    if (widget.width < minCellWidthForOffset) return _lastCalculatedOffset;
+
+    // Calculate how much the cell's left edge has scrolled past the viewport
+    final viewportLeftEdge = scrollOffset;
+    final cellLeftEdge = widget.programStartOffset;
+
+    // If cell left edge is still in or ahead of viewport, no offset needed
+    if (cellLeftEdge >= viewportLeftEdge) {
+      if (_lastCalculatedOffset != 0.0) {
+        _lastCalculatedOffset = 0.0;
+      }
+      return 0.0;
+    }
+
+    // Calculate ideal offset: push text right to viewport edge
+    var textOffset = viewportLeftEdge - cellLeftEdge;
+
+    // But don't offset so much that text has less than minVisibleTextSpace
+    final maxOffset = widget.width - minVisibleTextSpace - (textPadding * 2);
+
+    // Clamp to valid range
+    final newOffset = textOffset.clamp(0.0, maxOffset.clamp(0.0, double.infinity));
+
+    // Only update if change exceeds threshold (reduces unnecessary repaints)
+    if ((newOffset - _lastCalculatedOffset).abs() >= _offsetThreshold) {
+      _lastCalculatedOffset = newOffset;
+    }
+
+    return _lastCalculatedOffset;
+  }
 
   @override
   Widget build(BuildContext context) {
     final isAiring = widget.program.isCurrentlyAiring;
     final hasEnded = widget.program.hasEnded;
-    final timeFormat = DateFormat.jm();
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -1259,41 +1329,8 @@ class _ProgramCellState extends State<_ProgramCell> {
                     ),
                   ),
                 ),
-              // Content
-              Padding(
-                padding: const EdgeInsets.all(10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      widget.program.title,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight:
-                            isAiring ? FontWeight.w700 : FontWeight.w500,
-                        color: hasEnded
-                            ? AppColors.textMuted
-                            : isAiring
-                                ? AppColors.textPrimary
-                                : AppColors.textSecondary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${timeFormat.format(widget.program.start)} - ${timeFormat.format(widget.program.end)}',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textMuted,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
+              // Content with sticky text offset for long programs
+              _buildOffsetContent(isAiring, hasEnded),
               // Live badge
               if (widget.program.isLive && isAiring)
                 Positioned(
@@ -1352,6 +1389,76 @@ class _ProgramCellState extends State<_ProgramCell> {
         ),
       ),
     );
+  }
+
+  /// Build the content with scroll-aware text offset for long programs
+  Widget _buildOffsetContent(bool isAiring, bool hasEnded) {
+    // Use cached static DateFormat for performance
+    final startTime = _timeFormat.format(widget.program.start);
+    final endTime = _timeFormat.format(widget.program.end);
+
+    // Build the text content widget - use dynamic left padding instead of Transform
+    // to ensure text has full remaining width available
+    Widget buildTextContent(double offset) {
+      return Padding(
+        padding: EdgeInsets.only(
+          left: 10 + offset,
+          right: 10,
+          top: 10,
+          bottom: 10,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              widget.program.title,
+              style: TextStyle(
+                color: hasEnded
+                    ? AppColors.textMuted
+                    : isAiring
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
+                fontSize: 13,
+                fontWeight: isAiring ? FontWeight.w600 : FontWeight.w500,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '$startTime - $endTime',
+              style: TextStyle(
+                color: hasEnded
+                    ? AppColors.textMuted.withValues(alpha: 0.7)
+                    : AppColors.textMuted,
+                fontSize: 11,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      );
+    }
+
+    // If we have a scroll controller and cell is wide enough to benefit from sticky text
+    // Only use ListenableBuilder for wider cells (>200px) for performance
+    // This reduces the number of cells that need scroll-aware rebuilds
+    if (widget.scrollController != null && widget.width > 200) {
+      return RepaintBoundary(
+        child: ListenableBuilder(
+          listenable: widget.scrollController!,
+          builder: (context, _) {
+            final offset = _calculateTextOffset(widget.scrollController!.offset);
+            return buildTextContent(offset);
+          },
+        ),
+      );
+    }
+
+    // Otherwise, render without offset (narrow cells don't need sticky text)
+    return buildTextContent(0);
   }
 
   Color _getCellColor(bool isAiring, bool hasEnded, bool isHovered) {

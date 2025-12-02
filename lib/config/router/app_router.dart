@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hive_ce/hive.dart';
 
 import '../../features/channels/presentation/screens/channel_list_screen.dart';
 import '../../features/epg/presentation/screens/tv_guide_screen.dart';
@@ -7,16 +9,61 @@ import '../../features/favorites/presentation/screens/favorites_screen.dart';
 import '../../features/player/presentation/screens/player_screen.dart';
 import '../../features/playlist/presentation/screens/add_playlist_screen.dart';
 import '../../features/playlist/presentation/screens/playlist_manager_screen.dart';
+import '../../features/playlist/data/models/playlist_model.dart';
 import '../../features/search/presentation/screens/search_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
+import '../../features/settings/presentation/providers/settings_providers.dart';
 import '../../shared/animations/page_transitions.dart';
 import '../../shared/widgets/app_shell.dart';
 import 'routes.dart';
 
-/// Application router configuration using go_router
-/// Features premium page transitions for a cinematic experience
-final GoRouter appRouter = GoRouter(
-  initialLocation: Routes.channels, // Start directly at channels
+/// Valid sidebar routes that can be restored on app startup
+const _validSidebarRoutes = {
+  Routes.channels,
+  Routes.tvGuide,
+  Routes.favorites,
+  Routes.playlists,
+  Routes.settings,
+};
+
+/// Check if user has any playlists (reads directly from Hive)
+bool _hasPlaylists() {
+  try {
+    if (Hive.isBoxOpen('playlists')) {
+      final box = Hive.box<PlaylistModel>('playlists');
+      return box.isNotEmpty;
+    }
+  } catch (_) {
+    // Box not open or error - assume no playlists
+  }
+  return false;
+}
+
+/// Provider for the application router
+/// Reads the last selected sidebar route from settings to restore state
+final appRouterProvider = Provider<GoRouter>((ref) {
+  final settings = ref.read(appSettingsProvider);
+  final savedRoute = settings.lastSelectedSidebarRoute;
+
+  String initialRoute;
+
+  if (savedRoute != null && _validSidebarRoutes.contains(savedRoute)) {
+    // Use saved route if valid
+    initialRoute = savedRoute;
+  } else if (_hasPlaylists()) {
+    // No saved route but has playlists - default to TV Guide
+    initialRoute = Routes.tvGuide;
+  } else {
+    // No saved route and no playlists - show add playlist screen
+    initialRoute = Routes.addPlaylist;
+  }
+
+  return _createRouter(initialRoute);
+});
+
+/// Creates the router with the specified initial location
+GoRouter _createRouter(String initialLocation) => GoRouter(
+  initialLocation: initialLocation,
   debugLogDiagnostics: true,
   routes: [
     // Main shell route with sidebar navigation

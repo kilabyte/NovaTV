@@ -139,6 +139,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     context.pop();
   }
 
+  void _closePlayer() {
+    // Stop playback completely and close
+    ref.read(playerProvider.notifier).stop();
+    context.pop();
+  }
+
   @override
   void dispose() {
     // Restore system UI
@@ -471,6 +477,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               icon: Icons.more_vert_rounded,
               onTap: _showOptionsSheet,
             ),
+            _CloseButton(onTap: _closePlayer),
           ],
         ],
       ),
@@ -908,6 +915,52 @@ class _MinimizeButtonState extends State<_MinimizeButton> {
           child: Icon(
             Icons.picture_in_picture_alt_rounded,
             color: _isHovered ? AppColors.primary : Colors.white,
+            size: 20,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Close button to stop playback completely
+class _CloseButton extends StatefulWidget {
+  final VoidCallback onTap;
+
+  const _CloseButton({required this.onTap});
+
+  @override
+  State<_CloseButton> createState() => _CloseButtonState();
+}
+
+class _CloseButtonState extends State<_CloseButton> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: _isHovered
+                ? AppColors.error.withValues(alpha: 0.3)
+                : Colors.black.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: _isHovered
+                  ? AppColors.error.withValues(alpha: 0.7)
+                  : Colors.white.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Icon(
+            Icons.close_rounded,
+            color: _isHovered ? AppColors.error : Colors.white,
             size: 20,
           ),
         ),

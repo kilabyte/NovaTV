@@ -10,6 +10,7 @@ import '../../features/epg/presentation/providers/epg_providers.dart';
 import '../../features/player/presentation/providers/player_providers.dart';
 import '../../features/player/presentation/widgets/mini_player.dart';
 import '../../features/playlist/presentation/providers/playlist_providers.dart';
+import '../../features/settings/presentation/providers/settings_providers.dart';
 import 'responsive_layout.dart';
 
 /// Provider to track pinned groups
@@ -84,25 +85,36 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   void _onItemTapped(BuildContext context, int index) {
     HapticFeedback.selectionClick();
+    String? routeToSave;
     switch (index) {
       case 0:
         context.go(Routes.channels);
+        routeToSave = Routes.channels;
         break;
       case 1:
         context.go(Routes.tvGuide);
+        routeToSave = Routes.tvGuide;
         break;
       case 2:
         context.go(Routes.favorites);
+        routeToSave = Routes.favorites;
         break;
       case 3:
         context.go(Routes.playlists);
+        routeToSave = Routes.playlists;
         break;
       case 4:
         context.go(Routes.settings);
+        routeToSave = Routes.settings;
         break;
       case 5:
         context.push(Routes.search);
+        // Don't save search as it's a modal/overlay
         break;
+    }
+    // Persist the selected route (except search)
+    if (routeToSave != null) {
+      ref.read(appSettingsProvider.notifier).setLastSelectedSidebarRoute(routeToSave);
     }
   }
 
@@ -185,9 +197,6 @@ class _DesktopSidebar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final groupsAsync = ref.watch(channelGroupsProvider);
-    final pinnedGroups = ref.watch(pinnedGroupsProvider);
-
     return Container(
       width: 220,
       color: AppColors.sidebar,
@@ -204,6 +213,16 @@ class _DesktopSidebar extends ConsumerWidget {
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 8),
               children: [
+                // TV Guide - prominent position at top
+                _SidebarItemLarge(
+                  icon: Icons.calendar_month_rounded,
+                  label: 'TV Guide',
+                  isSelected: selectedIndex == 1,
+                  onTap: () => onItemTapped(1),
+                ),
+
+                const SizedBox(height: 4),
+
                 // Primary items
                 _SidebarItem(
                   icon: Icons.star_rounded,
@@ -218,81 +237,18 @@ class _DesktopSidebar extends ConsumerWidget {
                 // Divider
                 _SidebarDivider(),
 
-                // Groups section header
-                _SidebarSectionHeader(title: 'GROUPS'),
-
-                // Pinned groups first
-                groupsAsync.when(
-                  data: (groups) {
-                    final pinned = groups.where((g) => pinnedGroups.contains(g)).toList();
-                    final unpinned = groups.where((g) => !pinnedGroups.contains(g)).toList();
-
-                    final selectedGroup = ref.watch(selectedGroupProvider);
-
-                    return Column(
-                      children: [
-                        // Pinned groups
-                        ...pinned.map((group) => _SidebarGroupItem(
-                          group: group,
-                          isPinned: true,
-                          isSelected: selectedGroup == group,
-                          onTap: () {
-                            ref.read(selectedGroupProvider.notifier).state = group;
-                            onItemTapped(0);
-                          },
-                          onPinToggle: () {
-                            final current = ref.read(pinnedGroupsProvider);
-                            ref.read(pinnedGroupsProvider.notifier).state =
-                              current.contains(group)
-                                ? current.difference({group})
-                                : current.union({group});
-                          },
-                        )),
-
-                        // All unpinned groups (scrollable)
-                        ...unpinned.map((group) => _SidebarGroupItem(
-                          group: group,
-                          isPinned: false,
-                          isSelected: selectedGroup == group,
-                          onTap: () {
-                            ref.read(selectedGroupProvider.notifier).state = group;
-                            onItemTapped(0);
-                          },
-                          onPinToggle: () {
-                            final current = ref.read(pinnedGroupsProvider);
-                            ref.read(pinnedGroupsProvider.notifier).state =
-                              current.union({group});
-                          },
-                        )),
-                      ],
-                    );
+                // Groups section (collapsible)
+                _GroupsSection(
+                  onGroupTap: (group) {
+                    ref.read(selectedGroupProvider.notifier).state = group;
+                    onItemTapped(0);
                   },
-                  loading: () => const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Center(
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ),
-                  ),
-                  error: (_, __) => const SizedBox(),
                 ),
 
                 // Divider
                 _SidebarDivider(),
 
                 // Secondary items
-                _SidebarItem(
-                  icon: Icons.calendar_month_rounded,
-                  label: 'TV Guide',
-                  isSelected: selectedIndex == 1,
-                  onTap: () => onItemTapped(1),
-                ),
                 _SidebarItem(
                   icon: Icons.search_rounded,
                   label: 'Search',
@@ -352,7 +308,7 @@ class _SidebarHeader extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           const Text(
-            'NovaTV',
+            'NovaIPTV',
             style: TextStyle(
               color: AppColors.textPrimary,
               fontSize: 18,
@@ -361,28 +317,6 @@ class _SidebarHeader extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SidebarSectionHeader extends StatelessWidget {
-  final String title;
-
-  const _SidebarSectionHeader({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: AppColors.textMuted,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
-        ),
       ),
     );
   }
@@ -529,6 +463,159 @@ class _RecentChannelItem extends StatefulWidget {
   State<_RecentChannelItem> createState() => _RecentChannelItemState();
 }
 
+/// Groups section with collapsible list (persists expansion state)
+class _GroupsSection extends ConsumerWidget {
+  final void Function(String group) onGroupTap;
+
+  const _GroupsSection({required this.onGroupTap});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final groupsAsync = ref.watch(channelGroupsProvider);
+    final pinnedGroups = ref.watch(pinnedGroupsProvider);
+    final settings = ref.watch(appSettingsProvider);
+    final isExpanded = settings.groupsSectionExpanded;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Section header with expand/collapse
+        _GroupsSectionHeader(
+          isExpanded: isExpanded,
+          onToggle: () {
+            ref.read(appSettingsProvider.notifier).setGroupsSectionExpanded(!isExpanded);
+          },
+        ),
+
+        // Groups list (when expanded)
+        if (isExpanded)
+          groupsAsync.when(
+            data: (groups) {
+              final pinned = groups.where((g) => pinnedGroups.contains(g)).toList();
+              final unpinned = groups.where((g) => !pinnedGroups.contains(g)).toList();
+              final selectedGroup = ref.watch(selectedGroupProvider);
+
+              return Column(
+                children: [
+                  // Pinned groups
+                  ...pinned.map((group) => _SidebarGroupItem(
+                    group: group,
+                    isPinned: true,
+                    isSelected: selectedGroup == group,
+                    onTap: () => onGroupTap(group),
+                    onPinToggle: () {
+                      final current = ref.read(pinnedGroupsProvider);
+                      ref.read(pinnedGroupsProvider.notifier).state =
+                        current.contains(group)
+                          ? current.difference({group})
+                          : current.union({group});
+                    },
+                  )),
+
+                  // All unpinned groups (scrollable)
+                  ...unpinned.map((group) => _SidebarGroupItem(
+                    group: group,
+                    isPinned: false,
+                    isSelected: selectedGroup == group,
+                    onTap: () => onGroupTap(group),
+                    onPinToggle: () {
+                      final current = ref.read(pinnedGroupsProvider);
+                      ref.read(pinnedGroupsProvider.notifier).state =
+                        current.union({group});
+                    },
+                  )),
+                ],
+              );
+            },
+            loading: () => const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ),
+            ),
+            error: (_, __) => const SizedBox(),
+          ),
+      ],
+    );
+  }
+}
+
+class _GroupsSectionHeader extends StatefulWidget {
+  final bool isExpanded;
+  final VoidCallback onToggle;
+
+  const _GroupsSectionHeader({
+    required this.isExpanded,
+    required this.onToggle,
+  });
+
+  @override
+  State<_GroupsSectionHeader> createState() => _GroupsSectionHeaderState();
+}
+
+class _GroupsSectionHeaderState extends State<_GroupsSectionHeader> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        onTap: widget.onToggle,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: _isHovered ? AppColors.surfaceHover : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.folder_rounded,
+                color: _isHovered
+                    ? AppColors.textPrimary
+                    : AppColors.textSecondary,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Groups',
+                  style: TextStyle(
+                    color: _isHovered
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ),
+              AnimatedRotation(
+                turns: widget.isExpanded ? 0.25 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textMuted,
+                  size: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RecentChannelItemState extends State<_RecentChannelItem> {
   bool _isHovered = false;
 
@@ -642,6 +729,83 @@ class _SidebarItemState extends State<_SidebarItem> {
                             : AppColors.textSecondary,
                     fontSize: 14,
                     fontWeight: widget.isSelected ? FontWeight.w500 : FontWeight.w400,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Larger sidebar item for prominent navigation items like TV Guide
+class _SidebarItemLarge extends StatefulWidget {
+  final IconData icon;
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _SidebarItemLarge({
+    required this.icon,
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  State<_SidebarItemLarge> createState() => _SidebarItemLargeState();
+}
+
+class _SidebarItemLargeState extends State<_SidebarItemLarge> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isHighlighted = _isHovered || widget.isSelected;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          margin: const EdgeInsets.only(bottom: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            color: widget.isSelected
+                ? AppColors.sidebarSelectedBg
+                : _isHovered
+                    ? AppColors.surfaceHover
+                    : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                widget.icon,
+                color: widget.isSelected
+                    ? AppColors.primary
+                    : isHighlighted
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  widget.label,
+                  style: TextStyle(
+                    color: widget.isSelected
+                        ? AppColors.textPrimary
+                        : isHighlighted
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary,
+                    fontSize: 15,
+                    fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.w500,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),

@@ -43,6 +43,12 @@ class AppSettingsModel extends HiveObject {
   @HiveField(12)
   final String? lastTvGuideCategory;
 
+  @HiveField(13)
+  final String? lastSelectedSidebarRoute;
+
+  @HiveField(14)
+  final bool groupsSectionExpanded;
+
   AppSettingsModel({
     this.themeMode = 'dark',
     this.autoRefreshPlaylists = false,
@@ -57,6 +63,8 @@ class AppSettingsModel extends HiveObject {
     this.rememberLastChannel = true,
     this.lastPlayedChannelId,
     this.lastTvGuideCategory,
+    this.lastSelectedSidebarRoute,
+    this.groupsSectionExpanded = true,
   });
 
   AppSettingsModel copyWith({
@@ -74,6 +82,8 @@ class AppSettingsModel extends HiveObject {
     String? lastPlayedChannelId,
     String? lastTvGuideCategory,
     bool clearLastTvGuideCategory = false,
+    String? lastSelectedSidebarRoute,
+    bool? groupsSectionExpanded,
   }) {
     return AppSettingsModel(
       themeMode: themeMode ?? this.themeMode,
@@ -89,6 +99,8 @@ class AppSettingsModel extends HiveObject {
       rememberLastChannel: rememberLastChannel ?? this.rememberLastChannel,
       lastPlayedChannelId: lastPlayedChannelId ?? this.lastPlayedChannelId,
       lastTvGuideCategory: clearLastTvGuideCategory ? null : (lastTvGuideCategory ?? this.lastTvGuideCategory),
+      lastSelectedSidebarRoute: lastSelectedSidebarRoute ?? this.lastSelectedSidebarRoute,
+      groupsSectionExpanded: groupsSectionExpanded ?? this.groupsSectionExpanded,
     );
   }
 }

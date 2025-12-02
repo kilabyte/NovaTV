@@ -31,16 +31,25 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsModel> {
   static const String _settingsKey = 'settings';
   Box<AppSettingsModel>? _box;
 
-  AppSettingsNotifier() : super(AppSettingsModel()) {
-    _loadSettings();
+  AppSettingsNotifier() : super(_loadInitialSettings()) {
+    // Box is already open from bootstrap, just store reference
+    _box = Hive.box<AppSettingsModel>('app_settings');
   }
 
-  Future<void> _loadSettings() async {
-    _box = await Hive.openBox<AppSettingsModel>('app_settings');
-    final settings = _box?.get(_settingsKey);
-    if (settings != null) {
-      state = settings;
+  /// Load settings synchronously since box is pre-opened in bootstrap
+  static AppSettingsModel _loadInitialSettings() {
+    try {
+      if (Hive.isBoxOpen('app_settings')) {
+        final box = Hive.box<AppSettingsModel>('app_settings');
+        final settings = box.get(_settingsKey);
+        if (settings != null) {
+          return settings;
+        }
+      }
+    } catch (_) {
+      // Fall back to defaults if any error
     }
+    return AppSettingsModel();
   }
 
   Future<void> _saveSettings() async {
@@ -113,6 +122,16 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsModel> {
     } else {
       state = state.copyWith(lastTvGuideCategory: category);
     }
+    _saveSettings();
+  }
+
+  void setLastSelectedSidebarRoute(String route) {
+    state = state.copyWith(lastSelectedSidebarRoute: route);
+    _saveSettings();
+  }
+
+  void setGroupsSectionExpanded(bool expanded) {
+    state = state.copyWith(groupsSectionExpanded: expanded);
     _saveSettings();
   }
 

@@ -3,7 +3,7 @@ class AppConstants {
   AppConstants._();
 
   /// App name
-  static const String appName = 'NovaTV';
+  static const String appName = 'NovaIPTV';
 
   /// App version
   static const String appVersion = '1.0.0';

@@ -3,12 +3,12 @@
 // Check in to version control
 
 import 'package:hive_ce/hive.dart';
-import 'package:novatv/features/epg/data/models/epg_channel_model.dart';
-import 'package:novatv/features/epg/data/models/epg_metadata_model.dart';
-import 'package:novatv/features/epg/data/models/program_model.dart';
-import 'package:novatv/features/playlist/data/models/channel_model.dart';
-import 'package:novatv/features/playlist/data/models/playlist_model.dart';
-import 'package:novatv/features/settings/data/models/app_settings_model.dart';
+import 'package:novaiptv/features/epg/data/models/epg_channel_model.dart';
+import 'package:novaiptv/features/epg/data/models/epg_metadata_model.dart';
+import 'package:novaiptv/features/epg/data/models/program_model.dart';
+import 'package:novaiptv/features/playlist/data/models/channel_model.dart';
+import 'package:novaiptv/features/playlist/data/models/playlist_model.dart';
+import 'package:novaiptv/features/settings/data/models/app_settings_model.dart';
 
 extension HiveRegistrar on HiveInterface {
   void registerAdapters() {

@@ -1034,7 +1034,7 @@ class _WelcomeScreen extends StatelessWidget {
                   colors: [AppColors.primary, AppColors.auroraPurple],
                 ).createShader(bounds),
                 child: const Text(
-                  'Welcome to NovaTV',
+                  'Welcome to NovaIPTV',
                   style: TextStyle(
                     fontSize: 30,
                     fontWeight: FontWeight.w700,

@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "Kilabyte IO" "\0"
-            VALUE "FileDescription", "novatv" "\0"
+            VALUE "FileDescription", "NovaIPTV" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "novatv" "\0"
+            VALUE "InternalName", "novaiptv" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2025 Kilabyte IO. All rights reserved." "\0"
-            VALUE "OriginalFilename", "novatv.exe" "\0"
-            VALUE "ProductName", "novatv" "\0"
+            VALUE "OriginalFilename", "novaiptv.exe" "\0"
+            VALUE "ProductName", "NovaIPTV" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

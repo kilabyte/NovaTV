@@ -199,7 +199,7 @@ class _SidebarNavigationState extends State<SidebarNavigation>
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'NovaIPTV',
+                'Nova IPTV',
                 style: TextStyle(
                   color: AppColors.darkOnSurface,
                   fontSize: 18,

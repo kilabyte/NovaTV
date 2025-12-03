@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../../../config/router/routes.dart';
 import '../../../../config/theme/app_colors.dart';
@@ -56,6 +57,13 @@ class SettingsScreen extends ConsumerWidget {
                       subtitle: _formatThemeMode(settings.themeMode),
                       onTap: () => _showThemeModePicker(context, ref),
                       showChevron: true,
+                    ),
+                    _SettingsTile(
+                      icon: Icons.favorite_rounded,
+                      title: 'Support the Developer',
+                      subtitle: 'Help keep the app updated',
+                      onTap: () => _handleSupportDeveloper(context),
+                      iconColor: AppColors.error,
                     ),
                   ],
                 ),
@@ -584,6 +592,57 @@ class SettingsScreen extends ConsumerWidget {
       ),
     );
   }
+
+  void _handleSupportDeveloper(BuildContext context) {
+    HapticFeedback.lightImpact();
+    // TODO: Implement cross-platform in-app purchase (using in_app_purchase package)
+    // Product IDs:
+    //   - Apple (iOS/macOS): XXXXXXXX
+    //   - Google Play (Android): XXXXXXXX
+    //   - Microsoft Store (Windows): XXXXXXXX
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.favorite_rounded, color: AppColors.error, size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Support the Developer',
+              style: TextStyle(color: AppColors.textPrimary),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Thank you for your interest in supporting development! This feature will be available soon.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -638,6 +697,7 @@ class _SettingsTile extends StatefulWidget {
   final VoidCallback onTap;
   final bool showChevron;
   final bool isDanger;
+  final Color? iconColor;
 
   const _SettingsTile({
     required this.icon,
@@ -646,6 +706,7 @@ class _SettingsTile extends StatefulWidget {
     required this.onTap,
     this.showChevron = false,
     this.isDanger = false,
+    this.iconColor,
   });
 
   @override
@@ -675,11 +736,12 @@ class _SettingsTileState extends State<_SettingsTile> {
             children: [
               Icon(
                 widget.icon,
-                color: widget.isDanger
-                    ? AppColors.error
-                    : _isHovered
-                        ? AppColors.primary
-                        : AppColors.textSecondary,
+                color: widget.iconColor ??
+                    (widget.isDanger
+                        ? AppColors.error
+                        : _isHovered
+                            ? AppColors.primary
+                            : AppColors.textSecondary),
                 size: 22,
               ),
               const SizedBox(width: 14),
@@ -854,7 +916,31 @@ class _CleanSwitch extends StatelessWidget {
   }
 }
 
-class _AboutTile extends StatelessWidget {
+class _AboutTile extends StatefulWidget {
+  @override
+  State<_AboutTile> createState() => _AboutTileState();
+}
+
+class _AboutTileState extends State<_AboutTile> {
+  String _version = '';
+  String _buildNumber = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPackageInfo();
+  }
+
+  Future<void> _loadPackageInfo() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() {
+        _version = packageInfo.version;
+        _buildNumber = packageInfo.buildNumber;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -879,7 +965,7 @@ class _AboutTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'NovaIPTV',
+                'Nova IPTV',
                 style: TextStyle(
                   color: AppColors.textPrimary,
                   fontSize: 17,
@@ -888,10 +974,18 @@ class _AboutTile extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                'Version 1.0.0',
+                'Version $_version',
                 style: TextStyle(
                   color: AppColors.textMuted,
                   fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Build $_buildNumber',
+                style: TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 12,
                 ),
               ),
               const SizedBox(height: 2),

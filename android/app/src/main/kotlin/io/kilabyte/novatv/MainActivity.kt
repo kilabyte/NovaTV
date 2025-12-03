@@ -1,4 +1,4 @@
-package com.novatv.novatv
+package io.kilabyte.novatv
 
 import io.flutter.embedding.android.FlutterActivity
 

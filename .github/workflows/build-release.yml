@@ -165,9 +165,11 @@ jobs:
       - name: Create DMG
         run: |
           mkdir -p artifacts
-          # Create a simple zip of the app bundle
-          cd build/macos/Build/Products/Release
-          zip -r ../../../../../artifacts/NovaTV-macOS.zip NovaTV.app
+          # Find and zip the app bundle
+          APP_PATH=$(find build/macos -name "NovaTV.app" -type d | head -1)
+          echo "Found app at: $APP_PATH"
+          cd "$(dirname "$APP_PATH")"
+          zip -r "$GITHUB_WORKSPACE/artifacts/NovaTV-macOS.zip" NovaTV.app
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4

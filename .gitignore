@@ -44,6 +44,10 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Claude AI
+.claude/
+CLAUDE.md
+
 # Generated output and machine-specific caches (never publish)
 **/build/
 release_builds/

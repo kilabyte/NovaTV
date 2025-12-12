@@ -9,11 +9,11 @@ on:
       create_release:
         description: 'Create a release'
         required: false
-        default: 'true'
+        default: true
         type: boolean
 
 env:
-  FLUTTER_VERSION: '3.27.4'
+  FLUTTER_VERSION: '3.35.3'
 
 jobs:
   build-android:

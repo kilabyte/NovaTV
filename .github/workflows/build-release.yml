@@ -165,10 +165,12 @@ jobs:
       - name: Create DMG
         run: |
           mkdir -p artifacts
-          # Find and zip the app bundle
-          APP_PATH=$(find build/macos -name "NovaTV.app" -type d | head -1)
-          echo "Found app at: $APP_PATH"
-          cd "$(dirname "$APP_PATH")"
+          # Debug: show where the app was built
+          echo "Searching for app..."
+          find build -name "*.app" -type d 2>/dev/null || true
+          ls -la build/macos/Build/Products/Release/ || true
+          # App should be at derivedDataPath/Build/Products/Release
+          cd build/macos/Build/Products/Release
           zip -r "$GITHUB_WORKSPACE/artifacts/NovaTV-macOS.zip" NovaTV.app
 
       - name: Upload macOS artifacts

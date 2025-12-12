@@ -124,6 +124,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Select Xcode version
+        run: |
+          # List available Xcode versions
+          ls -la /Applications/ | grep Xcode
+          # Use Xcode 15.4 if available, otherwise use default
+          if [ -d "/Applications/Xcode_15.4.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+          elif [ -d "/Applications/Xcode_15.3.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_15.3.app/Contents/Developer
+          fi
+          xcodebuild -version
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -131,11 +143,20 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Install CocoaPods
+        run: |
+          gem install cocoapods
+          pod --version
+
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Install pods
+        working-directory: macos
+        run: pod install --repo-update
+
       - name: Build macOS
-        run: flutter build macos --release
+        run: flutter build macos --release --verbose
 
       - name: Create DMG
         run: |

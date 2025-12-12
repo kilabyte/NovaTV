@@ -1,5 +1,10 @@
 # NovaTV
 
+[![Build and Release](https://github.com/kilabyte/NovaIPTV/actions/workflows/build-release.yml/badge.svg)](https://github.com/kilabyte/NovaIPTV/actions/workflows/build-release.yml)
+[![Release](https://img.shields.io/github/v/release/kilabyte/NovaIPTV?include_prereleases)](https://github.com/kilabyte/NovaIPTV/releases)
+[![License](https://img.shields.io/github/license/kilabyte/NovaIPTV)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20iOS%20%7C%20Android%20%7C%20Windows%20%7C%20Linux-blue)]()
+
 A modern, cross-platform IPTV player built with Flutter. I was frustrated with the existing IPTV apps out there—clunky interfaces, poor EPG support, and apps that felt like they were designed in 2010. So I built NovaTV to be the IPTV player I actually wanted to use.
 
 ## Why NovaTV?

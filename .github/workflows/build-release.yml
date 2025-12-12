@@ -150,7 +150,17 @@ jobs:
         run: pod install --repo-update
 
       - name: Build macOS
-        run: flutter build macos --release --verbose
+        run: |
+          flutter build macos --release \
+            --config-only
+          xcodebuild -workspace macos/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -derivedDataPath build/macos \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS="x86_64 arm64"
 
       - name: Create DMG
         run: |

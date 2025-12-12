@@ -120,20 +120,14 @@ jobs:
           path: artifacts/
 
   build-macos:
-    runs-on: macos-latest
+    runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
 
       - name: Select Xcode version
         run: |
-          # List available Xcode versions
-          ls -la /Applications/ | grep Xcode
-          # Use Xcode 15.4 if available, otherwise use default
-          if [ -d "/Applications/Xcode_15.4.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
-          elif [ -d "/Applications/Xcode_15.3.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_15.3.app/Contents/Developer
-          fi
+          # macos-13 has Xcode 15.2 by default
+          sudo xcode-select -s /Applications/Xcode_15.2.app/Contents/Developer
           xcodebuild -version
 
       - name: Set up Flutter

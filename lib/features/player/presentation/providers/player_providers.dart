@@ -3,8 +3,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../playlist/domain/entities/channel.dart';
-import '../../../playlist/presentation/providers/playlist_providers.dart'
-    show playlistRepositoryProvider, recentlyWatchedNotifierProvider;
+import '../../../playlist/presentation/providers/playlist_providers.dart' show playlistRepositoryProvider, recentlyWatchedNotifierProvider;
 
 /// Global player state for mini-player support
 class PlayerState {
@@ -16,35 +15,10 @@ class PlayerState {
   final bool isMinimized;
   final String? errorMessage;
 
-  const PlayerState({
-    this.channel,
-    this.player,
-    this.controller,
-    this.isPlaying = false,
-    this.isBuffering = false,
-    this.isMinimized = false,
-    this.errorMessage,
-  });
+  const PlayerState({this.channel, this.player, this.controller, this.isPlaying = false, this.isBuffering = false, this.isMinimized = false, this.errorMessage});
 
-  PlayerState copyWith({
-    Channel? channel,
-    Player? player,
-    VideoController? controller,
-    bool? isPlaying,
-    bool? isBuffering,
-    bool? isMinimized,
-    String? errorMessage,
-    bool clearError = false,
-  }) {
-    return PlayerState(
-      channel: channel ?? this.channel,
-      player: player ?? this.player,
-      controller: controller ?? this.controller,
-      isPlaying: isPlaying ?? this.isPlaying,
-      isBuffering: isBuffering ?? this.isBuffering,
-      isMinimized: isMinimized ?? this.isMinimized,
-      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-    );
+  PlayerState copyWith({Channel? channel, Player? player, VideoController? controller, bool? isPlaying, bool? isBuffering, bool? isMinimized, String? errorMessage, bool clearError = false}) {
+    return PlayerState(channel: channel ?? this.channel, player: player ?? this.player, controller: controller ?? this.controller, isPlaying: isPlaying ?? this.isPlaying, isBuffering: isBuffering ?? this.isBuffering, isMinimized: isMinimized ?? this.isMinimized, errorMessage: clearError ? null : (errorMessage ?? this.errorMessage));
   }
 
   bool get hasActivePlayer => player != null && channel != null;
@@ -65,15 +39,14 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     _ref.read(recentlyWatchedNotifierProvider.notifier).addChannel(channelId);
 
     // Create new player
+    // Note: Buffering is handled by media_kit/mpv with default settings
+    // For enhanced buffering configuration, mpv options can be set via
+    // environment variables or mpv config files, but media_kit's Player API
+    // doesn't expose direct buffer configuration methods
     final player = Player();
     final controller = VideoController(player);
 
-    state = state.copyWith(
-      player: player,
-      controller: controller,
-      isMinimized: false,
-      clearError: true,
-    );
+    state = state.copyWith(player: player, controller: controller, isMinimized: false, clearError: true);
 
     // Set up listeners
     player.stream.playing.listen((playing) {
@@ -118,12 +91,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         }
 
         // Open and play
-        await player.open(
-          Media(
-            channel.url,
-            httpHeaders: httpHeaders.isNotEmpty ? httpHeaders : null,
-          ),
-        );
+        await player.open(Media(channel.url, httpHeaders: httpHeaders.isNotEmpty ? httpHeaders : null));
       },
     );
   }

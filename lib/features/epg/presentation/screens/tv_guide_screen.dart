@@ -21,23 +21,6 @@ final tvGuideSelectedGroupProvider = Provider<String?>((ref) {
   return ref.watch(appSettingsProvider).lastTvGuideCategory;
 });
 
-/// Helper class for isolate communication (must be top-level for compute)
-/// Uses primitive types for serialization
-class _ProgramsProcessParams {
-  final List<Program> programs;
-  final List<String> channelIds;
-  final List<String> channelTvgIds;
-  final DateTime startTime;
-  final DateTime endTime;
-
-  _ProgramsProcessParams({
-    required this.programs,
-    required this.channelIds,
-    required this.channelTvgIds,
-    required this.startTime,
-    required this.endTime,
-  });
-}
 
 /// Clean TV Guide screen with solid dark design
 class TvGuideScreen extends ConsumerStatefulWidget {
@@ -436,47 +419,37 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
 
     return programsAsync.when(
       data: (programs) {
-        // Process programs in isolate for better performance
-        // Extract channel IDs for isolate processing
-        final channelIds = channels.map((c) => c.id).toList();
-        final channelTvgIds = channels.map((c) => c.tvgId ?? c.id).toList();
-        
-        return FutureBuilder<Map<String, List<Program>>>(
-          future: compute(_processProgramsForChannels, _ProgramsProcessParams(
-            programs: programs,
-            channelIds: channelIds,
-            channelTvgIds: channelTvgIds,
-            startTime: startTime,
-            endTime: endTime,
-          )),
-          builder: (context, snapshot) {
-            final programsByChannel = snapshot.data ?? {};
+        // Use provider to cache processed programs and avoid reprocessing on rebuilds
+        final programsByChannel = ref.watch(programsByChannelProvider((
+          programs: programs,
+          channels: channels,
+          startTime: startTime,
+          endTime: endTime,
+        )));
 
-            return Column(
-              children: [
-                // Time header
-                _buildTimeHeader(context, startTime),
-                // Main content
-                Expanded(
-                  child: Row(
-                    children: [
-                      // Channel column
-                      _buildChannelColumn(context, channels),
-                      // Program grid
-                      Expanded(
-                        child: _buildProgramGrid(
-                          context,
-                          channels,
-                          programsByChannel,
-                          startTime,
-                        ),
-                      ),
-                    ],
+        return Column(
+          children: [
+            // Time header
+            _buildTimeHeader(context, startTime),
+            // Main content
+            Expanded(
+              child: Row(
+                children: [
+                  // Channel column
+                  _buildChannelColumn(context, channels),
+                  // Program grid
+                  Expanded(
+                    child: _buildProgramGrid(
+                      context,
+                      channels,
+                      programsByChannel,
+                      startTime,
+                    ),
                   ),
-                ),
-              ],
-            );
-          },
+                ],
+              ),
+            ),
+          ],
         );
       },
       loading: () => Column(
@@ -516,50 +489,6 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     );
   }
   
-  /// Process programs for channels - moved to isolate for performance
-  /// This runs in a separate isolate to avoid blocking the UI thread
-  static Map<String, List<Program>> _processProgramsForChannels(_ProgramsProcessParams params) {
-    final map = <String, List<Program>>{};
-    
-    // Create sets for fast lookup
-    final channelIdSet = params.channelIds.toSet();
-    final channelTvgIdSet = params.channelTvgIds.toSet();
-    
-    // Filter and group programs by channel ID
-    for (final program in params.programs) {
-      // Only include programs that overlap with the time range
-      if (program.end.isAfter(params.startTime) && program.start.isBefore(params.endTime)) {
-        // Try to match by channelId (tvgId) or fallback to channel ID
-        String? matchedChannelId;
-        
-        // First try to match by tvgId
-        if (channelTvgIdSet.contains(program.channelId)) {
-          // Find the corresponding channel ID
-          final index = params.channelTvgIds.indexOf(program.channelId);
-          if (index >= 0 && index < params.channelIds.length) {
-            matchedChannelId = params.channelIds[index];
-          }
-        }
-        
-        // Fallback to direct channel ID match
-        if (matchedChannelId == null && channelIdSet.contains(program.channelId)) {
-          matchedChannelId = program.channelId;
-        }
-        
-        // Use first channel ID as fallback if no match found
-        matchedChannelId ??= params.channelIds.isNotEmpty ? params.channelIds.first : program.channelId;
-        
-        map.putIfAbsent(matchedChannelId, () => []).add(program);
-      }
-    }
-    
-    // Sort programs by start time for each channel (in isolate, doesn't block UI)
-    for (final key in map.keys) {
-      map[key]!.sort((a, b) => a.start.compareTo(b.start));
-    }
-    
-    return map;
-  }
 
   Widget _buildTimeHeader(BuildContext context, DateTime startTime) {
     final timeFormat = DateFormat.j();
@@ -739,8 +668,9 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
           itemExtent: _rowHeight,
         itemBuilder: (context, index) {
           final channel = channels[index];
-          // Try tvgId first, then fallback to id for program matching
-          final programs = programsByChannel[channel.tvgId ?? channel.id] ?? [];
+          // Look up programs by channel.id (which is what we use as the map key)
+          // The processing function matches programs by tvgId but stores them under channel.id
+          final programs = programsByChannel[channel.id] ?? [];
 
             // Wrap each row in RepaintBoundary to isolate repaints and improve performance
             // This prevents repainting other rows when scrolling

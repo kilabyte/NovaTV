@@ -867,8 +867,8 @@ class _MobileNavBar extends ConsumerWidget {
   }
 
   void _showGroupsSheet(BuildContext context, WidgetRef ref) {
-    final groupsAsync = ref.read(channelGroupsProvider);
-    final selectedGroup = ref.read(selectedGroupProvider);
+    // NOTE: We don't read providers here - we use Consumer inside the modal
+    // so it can reactively watch for state changes (loading -> data, updates, etc.)
 
     showModalBottomSheet(
       context: context,
@@ -880,80 +880,88 @@ class _MobileNavBar extends ConsumerWidget {
         minChildSize: 0.3,
         maxChildSize: 0.9,
         expand: false,
-        builder: (context, scrollController) => SafeArea(
-          child: Column(
-            children: [
-              // Handle
-              Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
-              ),
-              // Header
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: Row(
-                  children: [
-                    Icon(Icons.folder_rounded, color: AppColors.primary, size: 24),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Groups',
-                      style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                    const Spacer(),
-                    groupsAsync.when(
-                      data: (groups) => Text('${groups.length} groups', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
-                      loading: () => const SizedBox.shrink(),
-                      error: (_, __) => const SizedBox.shrink(),
-                    ),
-                  ],
-                ),
-              ),
-              Divider(color: AppColors.border, height: 1),
-              // Groups list
-              Expanded(
-                child: groupsAsync.when(
-                  data: (groups) {
-                    if (groups.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.folder_off_rounded, size: 48, color: AppColors.textMuted),
-                            const SizedBox(height: 12),
-                            Text('No groups available', style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
-                          ],
+        builder: (context, scrollController) => Consumer(
+          builder: (context, ref, child) {
+            // Watch providers reactively - UI will rebuild when state changes
+            final groupsAsync = ref.watch(channelGroupsProvider);
+            final selectedGroup = ref.watch(selectedGroupProvider);
+
+            return SafeArea(
+              child: Column(
+                children: [
+                  // Handle
+                  Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+                  ),
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.folder_rounded, color: AppColors.primary, size: 24),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Groups',
+                          style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
                         ),
-                      );
-                    }
-                    return ListView.builder(
-                      controller: scrollController,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      itemCount: groups.length,
-                      itemBuilder: (context, index) {
-                        final group = groups[index];
-                        final isSelected = group == selectedGroup;
-                        return _MobileGroupItem(
-                          group: group,
-                          isSelected: isSelected,
-                          onTap: () {
-                            ref.read(selectedGroupProvider.notifier).state = group;
-                            Navigator.pop(context);
-                            onTap(0); // Navigate to channels
+                        const Spacer(),
+                        groupsAsync.when(
+                          data: (groups) => Text('${groups.length} groups', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                          loading: () => const SizedBox.shrink(),
+                          error: (_, __) => const SizedBox.shrink(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(color: AppColors.border, height: 1),
+                  // Groups list
+                  Expanded(
+                    child: groupsAsync.when(
+                      data: (groups) {
+                        if (groups.isEmpty) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.folder_off_rounded, size: 48, color: AppColors.textMuted),
+                                const SizedBox(height: 12),
+                                Text('No groups available', style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
+                              ],
+                            ),
+                          );
+                        }
+                        return ListView.builder(
+                          controller: scrollController,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          itemCount: groups.length,
+                          itemBuilder: (context, index) {
+                            final group = groups[index];
+                            final isSelected = group == selectedGroup;
+                            return _MobileGroupItem(
+                              group: group,
+                              isSelected: isSelected,
+                              onTap: () {
+                                ref.read(selectedGroupProvider.notifier).state = group;
+                                Navigator.pop(context);
+                                onTap(0); // Navigate to channels
+                              },
+                            );
                           },
                         );
                       },
-                    );
-                  },
-                  loading: () => const Center(child: CircularProgressIndicator()),
-                  error: (error, _) => Center(
-                    child: Text('Failed to load groups', style: TextStyle(color: AppColors.textMuted)),
+                      loading: () => const Center(child: CircularProgressIndicator()),
+                      error: (error, _) => Center(
+                        child: Text('Failed to load groups', style: TextStyle(color: AppColors.textMuted)),
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );

@@ -65,6 +65,37 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     _timeHeaderController.addListener(_onHorizontalScroll);
 
     _scrollToCurrentTimeWithRetry();
+    
+    // Refresh EPG data when TV Guide screen is opened (background thread)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshEpgOnOpen();
+    });
+  }
+
+  /// Refresh EPG data when TV Guide screen is opened
+  /// Runs in background to avoid blocking UI
+  void _refreshEpgOnOpen() {
+    // Run refresh in background to avoid blocking UI
+    // Access ref through the widget's context
+    Future.microtask(() async {
+      if (!mounted) return;
+      
+      try {
+        final playlists = ref.read(playlistNotifierProvider);
+        final playlist = playlists.valueOrNull?.firstOrNull;
+
+        if (playlist?.epgUrl != null && playlist!.epgUrl!.isNotEmpty) {
+          // Refresh EPG in background
+          await ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(
+                playlist.id,
+                playlist.epgUrl!,
+              );
+        }
+      } catch (e) {
+        // Silently fail - EPG refresh is a background operation
+        // User can manually refresh if needed
+      }
+    });
   }
 
   void _scrollToCurrentTimeWithRetry({int attempts = 0}) {

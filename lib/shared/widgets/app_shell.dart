@@ -41,34 +41,69 @@ class _AppShellState extends ConsumerState<AppShell> {
     });
   }
 
-  /// Check if playlists or EPG need auto-refresh on app startup
+  /// Refresh all playlists and EPG on app startup using background threads
+  /// This runs in the background to avoid blocking the main UI thread
   Future<void> _checkAutoRefresh() async {
     if (_hasCheckedAutoRefresh) return;
     _hasCheckedAutoRefresh = true;
 
-    AppLogger.info('Checking for auto-refresh on startup...');
+    AppLogger.info('Starting auto-refresh on startup (background thread)...');
 
-    // Get all playlists
-    final playlistsAsync = ref.read(playlistsProvider);
+    // Run refresh operations in background to avoid blocking UI
+    // Use unawaited to allow UI to continue rendering while refresh happens
+    _refreshInBackground();
+  }
 
-    playlistsAsync.whenData((playlists) async {
-      for (final playlist in playlists) {
-        // Check if playlist needs refresh
-        if (playlist.autoRefresh && playlist.needsRefresh) {
-          AppLogger.info('Auto-refreshing playlist: ${playlist.name}');
-          await ref.read(playlistNotifierProvider.notifier).refreshPlaylist(playlist.id);
+  /// Perform refresh operations in background thread
+  Future<void> _refreshInBackground() async {
+    // Use compute or isolate for CPU-intensive work, but for I/O operations
+    // like network requests, we can use regular async/await with unawaited
+    // to avoid blocking the main thread
+    
+    try {
+      // Get all playlists
+      final playlistsAsync = ref.read(playlistsProvider);
+
+      await playlistsAsync.whenData((playlists) async {
+        if (playlists.isEmpty) {
+          AppLogger.info('No playlists to refresh');
+          return;
         }
 
-        // Check if EPG needs refresh
-        if (playlist.hasEpg && playlist.autoRefresh && playlist.needsRefresh) {
-          AppLogger.info('Auto-refreshing EPG for playlist: ${playlist.name}');
-          await ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(
-            playlist.id,
-            playlist.epgUrl!,
+        // Refresh all playlists in parallel (background)
+        final refreshFutures = <Future>[];
+        
+        for (final playlist in playlists) {
+          // Always refresh playlist on app startup (not just when needsRefresh)
+          AppLogger.info('Refreshing playlist: ${playlist.name}');
+          refreshFutures.add(
+            ref.read(playlistNotifierProvider.notifier).refreshPlaylist(playlist.id)
+              .catchError((error) {
+                AppLogger.warning('Failed to refresh playlist ${playlist.name}: $error');
+              }),
           );
+
+          // Always refresh EPG if available
+          if (playlist.hasEpg && playlist.epgUrl != null && playlist.epgUrl!.isNotEmpty) {
+            AppLogger.info('Refreshing EPG for playlist: ${playlist.name}');
+            refreshFutures.add(
+              ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(
+                playlist.id,
+                playlist.epgUrl!,
+              ).catchError((error) {
+                AppLogger.warning('Failed to refresh EPG for ${playlist.name}: $error');
+              }),
+            );
+          }
         }
-      }
-    });
+
+        // Wait for all refreshes to complete (but don't block UI)
+        await Future.wait(refreshFutures, eagerError: false);
+        AppLogger.info('Auto-refresh completed');
+      });
+    } catch (e) {
+      AppLogger.error('Error during auto-refresh: $e');
+    }
   }
 
   int _calculateSelectedIndex(BuildContext context) {

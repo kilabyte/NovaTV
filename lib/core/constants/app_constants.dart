@@ -6,7 +6,7 @@ class AppConstants {
   static const String appName = 'NovaIPTV';
 
   /// App version
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '1.0.2';
 
   /// Default HTTP timeout in seconds
   static const int httpTimeout = 30;

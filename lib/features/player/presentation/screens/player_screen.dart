@@ -135,8 +135,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   void _minimizePlayer() {
     // Minimize to PiP instead of closing
+    // Clear any error state when going back
     ref.read(playerProvider.notifier).minimize();
-    context.pop();
+    if (context.mounted) {
+      context.pop();
+    }
   }
 
   void _closePlayer() {
@@ -168,11 +171,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final isInitialized = controller != null;
     final errorMessage = playerState.errorMessage;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      // Wrap the entire body in MouseRegion to track mouse position consistently
-      // This prevents the controls overlay from interfering with hover detection
-      body: MouseRegion(
+    return PopScope(
+      // Handle Android back button - allow going back even when there's an error
+      canPop: true,
+      onPopInvoked: (didPop) {
+        if (didPop) {
+          // Clear error state when popping
+          ref.read(playerProvider.notifier).minimize();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        // Wrap the entire body in MouseRegion to track mouse position consistently
+        // This prevents the controls overlay from interfering with hover detection
+        body: MouseRegion(
         onEnter: _isDesktop ? (_) => _showControlsOnHover() : null,
         onExit: _isDesktop ? (_) => _hideControlsOnHoverExit() : null,
         child: Stack(
@@ -215,6 +227,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -339,8 +352,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton(
-                  onPressed: () {
-                    ref.read(playerProvider.notifier).retry();
+                  onPressed: () async {
+                    // Show loading state while retrying
+                    await ref.read(playerProvider.notifier).retry();
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,

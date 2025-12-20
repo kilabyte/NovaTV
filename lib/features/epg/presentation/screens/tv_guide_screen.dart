@@ -51,7 +51,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
 
   // Debounce timer for scroll events to reduce rebuilds
   Timer? _scrollDebounceTimer;
-  
+
   // Cache for processed programs to avoid re-computation on every rebuild
   Future<Map<String, List<Program>>>? _cachedProgramsFuture;
   String? _lastProgramsKey;
@@ -489,10 +489,10 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
         // Create stable DateTime instances
         final stableStartTime = DateTime(startTime.year, startTime.month, startTime.day, startTime.hour);
         final stableEndTime = DateTime(endTime.year, endTime.month, endTime.day, endTime.hour);
-        
+
         // Create a stable key based on data to cache the future
         final programsKey = '${programs.length}_${channels.length}_${programs.firstOrNull?.id ?? ''}_${channels.firstOrNull?.id ?? ''}_${stableStartTime.millisecondsSinceEpoch}_${stableEndTime.millisecondsSinceEpoch}';
-        
+
         // Only create a new future if the data has changed
         if (_cachedProgramsFuture == null || _lastProgramsKey != programsKey) {
           if (kDebugMode) {
@@ -1252,6 +1252,7 @@ class _ProgramCellState extends State<_ProgramCell> {
   static const double _offsetThreshold = 8.0;
 
   /// Calculate how much to offset the text based on current scroll position
+  /// For currently airing programs, aligns text to current time position
   /// Uses threshold to avoid excessive rebuilds - only returns new value when
   /// change is significant enough to warrant a repaint
   double _calculateTextOffset(double scrollOffset) {
@@ -1262,10 +1263,61 @@ class _ProgramCellState extends State<_ProgramCell> {
     // Don't offset for very narrow cells
     if (widget.width < minCellWidthForOffset) return _lastCalculatedOffset;
 
-    // Calculate how much the cell's left edge has scrolled past the viewport
+    final isAiring = widget.program.isCurrentlyAiring;
     final viewportLeftEdge = scrollOffset;
     final cellLeftEdge = widget.programStartOffset;
 
+    // For currently airing programs, align text to current time position (where progress indicator is)
+    // This ensures text is always visible at "now" even if program extends far to the left
+    if (isAiring && widget.program.progress > 0) {
+      // Calculate where the current time is within the visible cell
+      // progress is 0.0 to 1.0, representing position through the entire program
+      // We need to find where that position is in the visible cell
+      final currentTimePositionInCell = widget.width * widget.program.progress;
+      final currentTimePositionInGrid = cellLeftEdge + currentTimePositionInCell;
+
+      // If current time position is to the left of viewport, offset text to align with it
+      if (currentTimePositionInGrid < viewportLeftEdge) {
+        // Calculate offset needed to align text to current time position
+        // We want the text to start at the current time position
+        var textOffset = viewportLeftEdge - currentTimePositionInGrid;
+
+        // But don't offset so much that text has less than minVisibleTextSpace
+        final maxOffset = widget.width - minVisibleTextSpace - (textPadding * 2);
+        final newOffset = textOffset.clamp(0.0, maxOffset.clamp(0.0, double.infinity));
+
+        // Only update if change exceeds threshold
+        if ((newOffset - _lastCalculatedOffset).abs() >= _offsetThreshold) {
+          _lastCalculatedOffset = newOffset;
+        }
+        return _lastCalculatedOffset;
+      }
+
+      // If current time position is within or to the right of viewport,
+      // check if we need to offset to keep text visible
+      if (currentTimePositionInGrid >= viewportLeftEdge && currentTimePositionInGrid <= viewportLeftEdge + 200) {
+        // Current time is near viewport edge, ensure text is visible
+        // If cell extends left of viewport, offset text to viewport edge
+        if (cellLeftEdge < viewportLeftEdge) {
+          var textOffset = viewportLeftEdge - cellLeftEdge;
+          final maxOffset = widget.width - minVisibleTextSpace - (textPadding * 2);
+          final newOffset = textOffset.clamp(0.0, maxOffset.clamp(0.0, double.infinity));
+
+          if ((newOffset - _lastCalculatedOffset).abs() >= _offsetThreshold) {
+            _lastCalculatedOffset = newOffset;
+          }
+          return _lastCalculatedOffset;
+        }
+      }
+
+      // If current time is well within viewport, no offset needed
+      if (_lastCalculatedOffset != 0.0) {
+        _lastCalculatedOffset = 0.0;
+      }
+      return 0.0;
+    }
+
+    // For non-airing programs, use original viewport edge alignment
     // If cell left edge is still in or ahead of viewport, no offset needed
     if (cellLeftEdge >= viewportLeftEdge) {
       if (_lastCalculatedOffset != 0.0) {

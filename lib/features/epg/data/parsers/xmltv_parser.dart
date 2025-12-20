@@ -2,17 +2,19 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:xml/xml.dart';
 
 import '../../domain/entities/epg_channel.dart';
 import '../../domain/entities/epg_data.dart';
 import '../../domain/entities/program.dart';
+import '../compute/xml_parse_compute.dart';
 
 /// Parser for XMLTV EPG data format
 /// Supports both plain .xml and compressed .xml.gz files
 class XmltvParser {
   /// Parse XMLTV content from raw bytes (handles gzip decompression)
-  EpgData parseBytes(Uint8List bytes, String sourceUrl) {
+  Future<EpgData> parseBytes(Uint8List bytes, String sourceUrl) async {
     String content;
 
     // Check for gzip magic bytes
@@ -28,46 +30,22 @@ class XmltvParser {
   }
 
   /// Parse XMLTV content from a string
-  EpgData parse(String content, String sourceUrl) {
-    final document = XmlDocument.parse(content);
-    final tv = document.rootElement;
+  /// Uses compute isolate for heavy XML parsing to prevent UI blocking
+  Future<EpgData> parse(String content, String sourceUrl) async {
+    // Use compute isolate for heavy XML parsing (especially for large EPG files)
+    // This prevents UI freezing on Android when parsing thousands of programs
+    final result = await compute(parseXmltvContent, ParseXmltvParams(content: content, sourceUrl: sourceUrl));
 
-    if (tv.name.local != 'tv') {
-      throw FormatException('Invalid XMLTV format: root element is not <tv>');
-    }
+    // Reconstruct EpgData from JSON result
+    final channels = (result['channels'] as List).map((json) {
+      return EpgChannel(id: json['id'] as String, displayName: json['displayName'] as String?, iconUrl: json['iconUrl'] as String?, url: json['url'] as String?);
+    }).toList();
 
-    // Parse generator date if available
-    DateTime? generatedAt;
-    final generatorDate = tv.getAttribute('date');
-    if (generatorDate != null) {
-      generatedAt = _parseXmltvDate(generatorDate);
-    }
+    final programs = (result['programs'] as List).map((json) {
+      return Program(id: json['id'] as String, channelId: json['channelId'] as String, title: json['title'] as String, start: DateTime.fromMillisecondsSinceEpoch(json['start'] as int), end: DateTime.fromMillisecondsSinceEpoch(json['end'] as int), subtitle: json['subtitle'] as String?, description: json['description'] as String?, category: json['category'] as String?, iconUrl: json['iconUrl'] as String?, episodeNum: json['episodeNum'] as String?, rating: json['rating'] as String?, isNew: json['isNew'] as bool? ?? false, isLive: json['isLive'] as bool? ?? false, isPremiere: json['isPremiere'] as bool? ?? false);
+    }).toList();
 
-    // Parse channels
-    final channels = <EpgChannel>[];
-    for (final channelElement in tv.findAllElements('channel')) {
-      final channel = _parseChannel(channelElement);
-      if (channel != null) {
-        channels.add(channel);
-      }
-    }
-
-    // Parse programs
-    final programs = <Program>[];
-    for (final programElement in tv.findAllElements('programme')) {
-      final program = _parseProgram(programElement);
-      if (program != null) {
-        programs.add(program);
-      }
-    }
-
-    return EpgData(
-      sourceUrl: sourceUrl,
-      generatedAt: generatedAt,
-      fetchedAt: DateTime.now(),
-      channels: channels,
-      programs: programs,
-    );
+    return EpgData(sourceUrl: result['sourceUrl'] as String, generatedAt: result['generatedAt'] != null ? DateTime.fromMillisecondsSinceEpoch(result['generatedAt'] as int) : null, fetchedAt: DateTime.fromMillisecondsSinceEpoch(result['fetchedAt'] as int), channels: channels, programs: programs);
   }
 
   /// Parse a channel element
@@ -97,12 +75,7 @@ class XmltvParser {
       url = urlElements.first.innerText.trim();
     }
 
-    return EpgChannel(
-      id: id,
-      displayName: displayName,
-      iconUrl: iconUrl,
-      url: url,
-    );
+    return EpgChannel(id: id, displayName: displayName, iconUrl: iconUrl, url: url);
   }
 
   /// Parse a programme element
@@ -198,22 +171,7 @@ class XmltvParser {
     // Generate unique ID
     final id = '${channelId}_${start.millisecondsSinceEpoch}';
 
-    return Program(
-      id: id,
-      channelId: channelId,
-      title: title,
-      start: start,
-      end: stop,
-      subtitle: subtitle,
-      description: description,
-      category: category,
-      iconUrl: iconUrl,
-      episodeNum: episodeNum,
-      rating: rating,
-      isNew: isNew,
-      isLive: isLive,
-      isPremiere: isPremiere,
-    );
+    return Program(id: id, channelId: channelId, title: title, start: start, end: stop, subtitle: subtitle, description: description, category: category, iconUrl: iconUrl, episodeNum: episodeNum, rating: rating, isNew: isNew, isLive: isLive, isPremiere: isPremiere);
   }
 
   /// Parse XMLTV date format: YYYYMMDDHHmmss +/-HHMM

@@ -104,24 +104,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.search_rounded,
-                  color: AppColors.primary,
-                  size: 20,
-                ),
+                decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
+                child: Icon(Icons.search_rounded, color: AppColors.primary, size: 20),
               ),
               const SizedBox(width: 12),
               const Text(
                 'Search',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -173,11 +162,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
           child: Text(
             resultText,
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.textMuted,
-              fontWeight: FontWeight.w500,
-            ),
+            style: TextStyle(fontSize: 13, color: AppColors.textMuted, fontWeight: FontWeight.w500),
           ),
         ),
 
@@ -188,12 +173,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             itemCount: results.length,
             itemBuilder: (context, index) {
               final result = results[index];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: _SearchResultTile(
-                  result: result,
-                  onTap: () => _playChannel(_getChannel(result)),
-                  onFavorite: () => _toggleFavorite(_getChannel(result).id),
+              // Wrap in RepaintBoundary to isolate repaints and improve scrolling performance
+              return RepaintBoundary(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _SearchResultTile(result: result, onTap: () => _playChannel(_getChannel(result)), onFavorite: () => _toggleFavorite(_getChannel(result).id)),
                 ),
               );
             },
@@ -232,13 +216,7 @@ class _SearchField extends StatelessWidget {
   final bool hasText;
   final VoidCallback onClear;
 
-  const _SearchField({
-    required this.controller,
-    required this.focusNode,
-    required this.isFocused,
-    required this.hasText,
-    required this.onClear,
-  });
+  const _SearchField({required this.controller, required this.focusNode, required this.isFocused, required this.hasText, required this.onClear});
 
   @override
   Widget build(BuildContext context) {
@@ -247,36 +225,21 @@ class _SearchField extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isFocused
-              ? AppColors.primary.withValues(alpha: 0.5)
-              : AppColors.border,
-          width: isFocused ? 1.5 : 1,
-        ),
+        border: Border.all(color: isFocused ? AppColors.primary.withValues(alpha: 0.5) : AppColors.border, width: isFocused ? 1.5 : 1),
       ),
       child: Row(
         children: [
           const SizedBox(width: 14),
-          Icon(
-            Icons.search_rounded,
-            color: isFocused ? AppColors.primary : AppColors.textMuted,
-            size: 20,
-          ),
+          Icon(Icons.search_rounded, color: isFocused ? AppColors.primary : AppColors.textMuted, size: 20),
           const SizedBox(width: 12),
           Expanded(
             child: TextField(
               controller: controller,
               focusNode: focusNode,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 15,
-              ),
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
               decoration: InputDecoration(
                 hintText: 'Search channels, programs...',
-                hintStyle: TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 15,
-                ),
+                hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 15),
                 border: InputBorder.none,
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(vertical: 14),
@@ -290,15 +253,8 @@ class _SearchField extends StatelessWidget {
               child: Container(
                 margin: const EdgeInsets.only(right: 8),
                 padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceElevated,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.close_rounded,
-                  color: AppColors.textMuted,
-                  size: 16,
-                ),
+                decoration: BoxDecoration(color: AppColors.surfaceElevated, borderRadius: BorderRadius.circular(8)),
+                child: Icon(Icons.close_rounded, color: AppColors.textMuted, size: 16),
               ),
             )
           else
@@ -318,11 +274,7 @@ class _SearchResultTile extends ConsumerStatefulWidget {
   final VoidCallback onTap;
   final VoidCallback onFavorite;
 
-  const _SearchResultTile({
-    required this.result,
-    required this.onTap,
-    required this.onFavorite,
-  });
+  const _SearchResultTile({required this.result, required this.onTap, required this.onFavorite});
 
   @override
   ConsumerState<_SearchResultTile> createState() => _SearchResultTileState();
@@ -339,10 +291,7 @@ class _SearchResultTileState extends ConsumerState<_SearchResultTile> {
   @override
   Widget build(BuildContext context) {
     final favorites = ref.watch(favoriteChannelsProvider);
-    final isFavorite = favorites.maybeWhen(
-      data: (favs) => favs.any((c) => c.id == _channel.id),
-      orElse: () => false,
-    );
+    final isFavorite = favorites.maybeWhen(data: (favs) => favs.any((c) => c.id == _channel.id), orElse: () => false);
 
     final isProgramResult = widget.result is ProgramSearchResult;
 
@@ -361,8 +310,8 @@ class _SearchResultTileState extends ConsumerState<_SearchResultTile> {
               color: _isHovered
                   ? AppColors.primary.withValues(alpha: 0.5)
                   : isProgramResult
-                      ? AppColors.primary.withValues(alpha: 0.3)
-                      : AppColors.border,
+                  ? AppColors.primary.withValues(alpha: 0.3)
+                  : AppColors.border,
             ),
           ),
           child: Row(
@@ -372,23 +321,14 @@ class _SearchResultTileState extends ConsumerState<_SearchResultTile> {
               const SizedBox(width: 12),
 
               // Channel/Program Info
-              Expanded(
-                child: _buildInfo(isProgramResult),
-              ),
+              Expanded(child: _buildInfo(isProgramResult)),
 
               // Action Buttons
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Favorite Button
-                  _IconButton(
-                    icon: isFavorite
-                        ? Icons.star_rounded
-                        : Icons.star_outline_rounded,
-                    color: isFavorite ? AppColors.favorite : AppColors.textMuted,
-                    isActive: isFavorite,
-                    onTap: widget.onFavorite,
-                  ),
+                  _IconButton(icon: isFavorite ? Icons.star_rounded : Icons.star_outline_rounded, color: isFavorite ? AppColors.favorite : AppColors.textMuted, isActive: isFavorite, onTap: widget.onFavorite),
                   const SizedBox(width: 8),
 
                   // Play Button
@@ -417,27 +357,16 @@ class _SearchResultTileState extends ConsumerState<_SearchResultTile> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 margin: const EdgeInsets.only(right: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(4),
-                ),
+                decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)),
                 child: Text(
                   'SHOW',
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                  ),
+                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.primary),
                 ),
               ),
               Expanded(
                 child: Text(
                   program.title,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -448,35 +377,16 @@ class _SearchResultTileState extends ConsumerState<_SearchResultTile> {
           // Channel name and time
           Row(
             children: [
-              Text(
-                _channel.name,
-                style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 13,
-                ),
-              ),
-              Text(
-                ' • ${timeFormat.format(program.start)}',
-                style: TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 13,
-                ),
-              ),
+              Text(_channel.name, style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+              Text(' • ${timeFormat.format(program.start)}', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
               if (program.isCurrentlyAiring)
                 Container(
                   margin: const EdgeInsets.only(left: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.red,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+                  decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)),
                   child: const Text(
                     'LIVE',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
                 ),
             ],
@@ -486,21 +396,14 @@ class _SearchResultTileState extends ConsumerState<_SearchResultTile> {
     }
 
     // Channel result - show current program if available
-    final currentProgram = ref.watch(currentProgramProvider((
-      playlistId: _channel.playlistId,
-      channelId: _channel.epgId,
-    )));
+    final currentProgram = ref.watch(currentProgramProvider((playlistId: _channel.playlistId, channelId: _channel.epgId)));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           _channel.name,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-          ),
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -509,19 +412,13 @@ class _SearchResultTileState extends ConsumerState<_SearchResultTile> {
         if (currentProgram.valueOrNull != null)
           Text(
             currentProgram.value!.title,
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 13,
-            ),
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           )
         else if (_channel.group != null)
           Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 8,
-              vertical: 2,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
               color: AppColors.surfaceElevated,
               borderRadius: BorderRadius.circular(6),
@@ -529,11 +426,7 @@ class _SearchResultTileState extends ConsumerState<_SearchResultTile> {
             ),
             child: Text(
               _channel.group!,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textSecondary,
-              ),
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.textSecondary),
             ),
           ),
       ],
@@ -566,6 +459,9 @@ class _ChannelLogo extends StatelessWidget {
             ? CachedNetworkImage(
                 imageUrl: logoUrl!,
                 fit: BoxFit.cover,
+                // Add memory limits for better performance on Android
+                memCacheWidth: 48,
+                memCacheHeight: 48,
                 placeholder: (_, __) => _buildPlaceholder(),
                 errorWidget: (_, __, ___) => _buildPlaceholder(),
               )
@@ -577,11 +473,7 @@ class _ChannelLogo extends StatelessWidget {
   Widget _buildPlaceholder() {
     return Container(
       color: AppColors.surfaceElevated,
-      child: Icon(
-        Icons.tv_rounded,
-        color: AppColors.textMuted,
-        size: 24,
-      ),
+      child: Icon(Icons.tv_rounded, color: AppColors.textMuted, size: 24),
     );
   }
 }
@@ -596,12 +488,7 @@ class _IconButton extends StatefulWidget {
   final bool isActive;
   final VoidCallback onTap;
 
-  const _IconButton({
-    required this.icon,
-    required this.color,
-    required this.onTap,
-    this.isActive = false,
-  });
+  const _IconButton({required this.icon, required this.color, required this.onTap, this.isActive = false});
 
   @override
   State<_IconButton> createState() => _IconButtonState();
@@ -624,23 +511,11 @@ class _IconButtonState extends State<_IconButton> {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: widget.isActive || _isHovered
-                ? widget.color.withValues(alpha: 0.2)
-                : AppColors.surfaceElevated,
+            color: widget.isActive || _isHovered ? widget.color.withValues(alpha: 0.2) : AppColors.surfaceElevated,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: widget.isActive || _isHovered
-                  ? widget.color.withValues(alpha: 0.5)
-                  : AppColors.border,
-            ),
+            border: Border.all(color: widget.isActive || _isHovered ? widget.color.withValues(alpha: 0.5) : AppColors.border),
           ),
-          child: Icon(
-            widget.icon,
-            color: widget.isActive || _isHovered
-                ? widget.color
-                : AppColors.textMuted,
-            size: 20,
-          ),
+          child: Icon(widget.icon, color: widget.isActive || _isHovered ? widget.color : AppColors.textMuted, size: 20),
         ),
       ),
     );
@@ -677,21 +552,11 @@ class _PlayButtonState extends State<_PlayButton> {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: _isHovered
-                ? AppColors.primary
-                : AppColors.primary.withValues(alpha: 0.2),
+            color: _isHovered ? AppColors.primary : AppColors.primary.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: _isHovered
-                  ? AppColors.primary
-                  : AppColors.primary.withValues(alpha: 0.5),
-            ),
+            border: Border.all(color: _isHovered ? AppColors.primary : AppColors.primary.withValues(alpha: 0.5)),
           ),
-          child: Icon(
-            Icons.play_arrow_rounded,
-            color: _isHovered ? Colors.black : AppColors.primary,
-            size: 20,
-          ),
+          child: Icon(Icons.play_arrow_rounded, color: _isHovered ? Colors.black : AppColors.primary, size: 20),
         ),
       ),
     );
@@ -724,33 +589,19 @@ class _EmptyState extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.3),
-                ),
+                border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
               ),
-              child: Icon(
-                Icons.search_rounded,
-                size: 48,
-                color: AppColors.primary.withValues(alpha: 0.7),
-              ),
+              child: Icon(Icons.search_rounded, size: 48, color: AppColors.primary.withValues(alpha: 0.7)),
             ),
             const SizedBox(height: 24),
             const Text(
               'Search channels & shows',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
             Text(
               'Find channels by name or category,\nor search TV shows by title',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 14,
-                height: 1.5,
-              ),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 14, height: 1.5),
               textAlign: TextAlign.center,
             ),
           ],
@@ -782,32 +633,19 @@ class _NoResultsState extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppColors.textMuted.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: AppColors.textMuted.withValues(alpha: 0.3),
-                ),
+                border: Border.all(color: AppColors.textMuted.withValues(alpha: 0.3)),
               ),
-              child: Icon(
-                Icons.search_off_rounded,
-                size: 48,
-                color: AppColors.textMuted,
-              ),
+              child: Icon(Icons.search_off_rounded, size: 48, color: AppColors.textMuted),
             ),
             const SizedBox(height: 24),
             const Text(
               'No results found',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
             Text(
               'Try a different search term',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 14,
-              ),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
               textAlign: TextAlign.center,
             ),
           ],
@@ -826,22 +664,9 @@ class _LoadingState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          SizedBox(
-            width: 32,
-            height: 32,
-            child: CircularProgressIndicator(
-              strokeWidth: 3,
-              color: AppColors.primary,
-            ),
-          ),
+          SizedBox(width: 32, height: 32, child: CircularProgressIndicator(strokeWidth: 3, color: AppColors.primary)),
           const SizedBox(height: 16),
-          Text(
-            'Searching...',
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 14,
-            ),
-          ),
+          Text('Searching...', style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
         ],
       ),
     );
@@ -872,32 +697,19 @@ class _ErrorState extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppColors.error.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: AppColors.error.withValues(alpha: 0.3),
-                ),
+                border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
               ),
-              child: Icon(
-                Icons.error_outline_rounded,
-                size: 40,
-                color: AppColors.error,
-              ),
+              child: Icon(Icons.error_outline_rounded, size: 40, color: AppColors.error),
             ),
             const SizedBox(height: 20),
             const Text(
               'Search failed',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             Text(
               error,
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 13,
-              ),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
               textAlign: TextAlign.center,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,

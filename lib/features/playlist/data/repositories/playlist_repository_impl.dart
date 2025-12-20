@@ -1,4 +1,5 @@
 import 'package:fpdart/fpdart.dart';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/error/exceptions.dart';
@@ -6,6 +7,7 @@ import '../../../../core/error/failures.dart';
 import '../../domain/entities/channel.dart';
 import '../../domain/entities/playlist.dart';
 import '../../domain/repositories/playlist_repository.dart';
+import '../compute/m3u_parse_compute.dart';
 import '../datasources/playlist_local_data_source.dart';
 import '../datasources/playlist_remote_data_source.dart';
 import '../models/channel_model.dart';
@@ -19,13 +21,7 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
   final M3UParser _m3uParser;
   static const _uuid = Uuid();
 
-  PlaylistRepositoryImpl({
-    required PlaylistLocalDataSource localDataSource,
-    required PlaylistRemoteDataSource remoteDataSource,
-    required M3UParser m3uParser,
-  })  : _localDataSource = localDataSource,
-        _remoteDataSource = remoteDataSource,
-        _m3uParser = m3uParser;
+  PlaylistRepositoryImpl({required PlaylistLocalDataSource localDataSource, required PlaylistRemoteDataSource remoteDataSource, required M3UParser m3uParser}) : _localDataSource = localDataSource, _remoteDataSource = remoteDataSource, _m3uParser = m3uParser;
 
   @override
   Future<Either<Failure, List<Playlist>>> getPlaylists() async {
@@ -52,11 +48,7 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
   }
 
   @override
-  Future<Either<Failure, Playlist>> addPlaylist({
-    required String name,
-    required String url,
-    String? epgUrl,
-  }) async {
+  Future<Either<Failure, Playlist>> addPlaylist({required String name, required String url, String? epgUrl}) async {
     try {
       final playlistId = _uuid.v4();
 
@@ -67,24 +59,19 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
         return const Left(ParseFailure('Invalid M3U format'));
       }
 
-      // Parse channels
-      final channels = _m3uParser.parse(content, playlistId);
+      // Parse channels in compute isolate to prevent UI blocking
+      final channelsJson = await compute(parseM3UContent, ParseM3UParams(content: content, playlistId: playlistId));
+
+      // Reconstruct channels from JSON
+      final channels = channelsJson.map((json) {
+        return Channel(id: json['id'] as String, name: json['name'] as String, url: json['url'] as String, playlistId: json['playlistId'] as String, tvgId: json['tvgId'] as String?, tvgName: json['tvgName'] as String?, logoUrl: json['logoUrl'] as String?, group: json['group'] as String?, language: json['language'] as String?, country: json['country'] as String?, tvgShift: json['tvgShift'] as int?, userAgent: json['userAgent'] as String?, referrer: json['referrer'] as String?, headers: json['headers'] != null ? Map<String, String>.from(json['headers'] as Map) : null, licenseUrl: json['licenseUrl'] as String?, licenseType: json['licenseType'] as String?, isFavorite: json['isFavorite'] as bool? ?? false, channelNumber: json['channelNumber'] as int?, catchupType: json['catchupType'] as String?, catchupSource: json['catchupSource'] as String?, catchupDays: json['catchupDays'] as int?);
+      }).toList();
 
       // Extract EPG URL from playlist header if not provided
-      final extractedEpgUrl = epgUrl ??
-          _m3uParser.extractEpgUrl(content) ??
-          _m3uParser.extractUrlTvg(content);
+      final extractedEpgUrl = epgUrl ?? _m3uParser.extractEpgUrl(content) ?? _m3uParser.extractUrlTvg(content);
 
       // Create playlist model
-      final playlist = PlaylistModel(
-        id: playlistId,
-        name: name,
-        url: url,
-        epgUrl: extractedEpgUrl,
-        lastRefreshed: DateTime.now(),
-        channelCount: channels.length,
-        createdAt: DateTime.now(),
-      );
+      final playlist = PlaylistModel(id: playlistId, name: name, url: url, epgUrl: extractedEpgUrl, lastRefreshed: DateTime.now(), channelCount: channels.length, createdAt: DateTime.now());
 
       // Save playlist and channels
       await _localDataSource.savePlaylist(playlist);
@@ -137,29 +124,26 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
       }
 
       // Fetch and parse new content
-      final content = await _remoteDataSource.fetchPlaylist(
-        existingModel.url,
-        headers: existingModel.headers,
-      );
+      final content = await _remoteDataSource.fetchPlaylist(existingModel.url, headers: existingModel.headers);
 
       if (!_m3uParser.isValidM3U(content)) {
         // Update playlist with error
-        final errorModel = existingModel.copyWith(
-          lastError: 'Invalid M3U format',
-        );
+        final errorModel = existingModel.copyWith(lastError: 'Invalid M3U format');
         await _localDataSource.savePlaylist(errorModel);
         return const Left(ParseFailure('Invalid M3U format'));
       }
 
-      // Parse channels
-      final channels = _m3uParser.parse(content, id);
+      // Parse channels in compute isolate to prevent UI blocking
+      final channelsJson = await compute(parseM3UContent, ParseM3UParams(content: content, playlistId: id));
+
+      // Reconstruct channels from JSON
+      final channels = channelsJson.map((json) {
+        return Channel(id: json['id'] as String, name: json['name'] as String, url: json['url'] as String, playlistId: json['playlistId'] as String, tvgId: json['tvgId'] as String?, tvgName: json['tvgName'] as String?, logoUrl: json['logoUrl'] as String?, group: json['group'] as String?, language: json['language'] as String?, country: json['country'] as String?, tvgShift: json['tvgShift'] as int?, userAgent: json['userAgent'] as String?, referrer: json['referrer'] as String?, headers: json['headers'] != null ? Map<String, String>.from(json['headers'] as Map) : null, licenseUrl: json['licenseUrl'] as String?, licenseType: json['licenseType'] as String?, isFavorite: json['isFavorite'] as bool? ?? false, channelNumber: json['channelNumber'] as int?, catchupType: json['catchupType'] as String?, catchupSource: json['catchupSource'] as String?, catchupDays: json['catchupDays'] as int?);
+      }).toList();
 
       // Preserve favorite status from existing channels
       final existingChannels = await _localDataSource.getChannels(id);
-      final favoriteIds = existingChannels
-          .where((c) => c.isFavorite)
-          .map((c) => c.tvgId ?? c.name)
-          .toSet();
+      final favoriteIds = existingChannels.where((c) => c.isFavorite).map((c) => c.tvgId ?? c.name).toSet();
 
       // Apply favorite status to new channels
       final channelsWithFavorites = channels.map((c) {
@@ -171,11 +155,7 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
       }).toList();
 
       // Update playlist
-      final updatedModel = existingModel.copyWith(
-        lastRefreshed: DateTime.now(),
-        channelCount: channels.length,
-        lastError: null,
-      );
+      final updatedModel = existingModel.copyWith(lastRefreshed: DateTime.now(), channelCount: channels.length, lastError: null);
 
       // Save updated playlist and channels
       await _localDataSource.savePlaylist(updatedModel);

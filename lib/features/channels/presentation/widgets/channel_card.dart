@@ -13,20 +13,13 @@ class ChannelCard extends StatefulWidget {
   final VoidCallback? onFavorite;
   final VoidCallback? onLongPress;
 
-  const ChannelCard({
-    super.key,
-    required this.channel,
-    required this.onTap,
-    this.onFavorite,
-    this.onLongPress,
-  });
+  const ChannelCard({super.key, required this.channel, required this.onTap, this.onFavorite, this.onLongPress});
 
   @override
   State<ChannelCard> createState() => _ChannelCardState();
 }
 
-class _ChannelCardState extends State<ChannelCard>
-    with SingleTickerProviderStateMixin {
+class _ChannelCardState extends State<ChannelCard> with SingleTickerProviderStateMixin {
   bool _isHovered = false;
   late final AnimationController _controller;
   late final Animation<double> _scaleAnimation;
@@ -35,16 +28,9 @@ class _ChannelCardState extends State<ChannelCard>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 200),
-      vsync: this,
-    );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-    );
-    _glowAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-    );
+    _controller = AnimationController(duration: const Duration(milliseconds: 200), vsync: this);
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    _glowAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
   }
 
   @override
@@ -77,9 +63,7 @@ class _ChannelCardState extends State<ChannelCard>
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primary.withValues(
-                      alpha: 0.3 * _glowAnimation.value,
-                    ),
+                    color: AppColors.primary.withValues(alpha: 0.3 * _glowAnimation.value),
                     blurRadius: 20 * _glowAnimation.value,
                     spreadRadius: 2 * _glowAnimation.value,
                   ),
@@ -97,12 +81,7 @@ class _ChannelCardState extends State<ChannelCard>
                       decoration: BoxDecoration(
                         color: AppColors.darkSurfaceVariant,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: _isHovered
-                              ? AppColors.primary.withValues(alpha: 0.5)
-                              : AppColors.darkBorder,
-                          width: _isHovered ? 1.5 : 1,
-                        ),
+                        border: Border.all(color: _isHovered ? AppColors.primary.withValues(alpha: 0.5) : AppColors.darkBorder, width: _isHovered ? 1.5 : 1),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -118,16 +97,7 @@ class _ChannelCardState extends State<ChannelCard>
                                 Positioned.fill(
                                   child: DecoratedBox(
                                     decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        colors: [
-                                          Colors.transparent,
-                                          AppColors.darkSurfaceVariant
-                                              .withValues(alpha: 0.8),
-                                        ],
-                                        stops: const [0.5, 1.0],
-                                      ),
+                                      gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, AppColors.darkSurfaceVariant.withValues(alpha: 0.8)], stops: const [0.5, 1.0]),
                                     ),
                                   ),
                                 ),
@@ -138,24 +108,12 @@ class _ChannelCardState extends State<ChannelCard>
                                     right: 8,
                                     child: Container(
                                       padding: const EdgeInsets.all(4),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.accent
-                                            .withValues(alpha: 0.2),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(
-                                        Icons.favorite_rounded,
-                                        color: AppColors.accent,
-                                        size: 16,
-                                      ),
+                                      decoration: BoxDecoration(color: AppColors.accent.withValues(alpha: 0.2), shape: BoxShape.circle),
+                                      child: Icon(Icons.favorite_rounded, color: AppColors.accent, size: 16),
                                     ),
                                   ),
                                 // Live indicator if live
-                                Positioned(
-                                  top: 8,
-                                  left: 8,
-                                  child: _LiveIndicator(),
-                                ),
+                                Positioned(top: 8, left: 8, child: _LiveIndicator()),
                               ],
                             ),
                           ),
@@ -170,12 +128,7 @@ class _ChannelCardState extends State<ChannelCard>
                                 children: [
                                   Text(
                                     widget.channel.displayName,
-                                    style: TextStyle(
-                                      color: AppColors.darkOnSurface,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: -0.2,
-                                    ),
+                                    style: TextStyle(color: AppColors.darkOnSurface, fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: -0.2),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -183,10 +136,7 @@ class _ChannelCardState extends State<ChannelCard>
                                     const SizedBox(height: 4),
                                     Text(
                                       widget.channel.group!,
-                                      style: TextStyle(
-                                        color: AppColors.darkOnSurfaceVariant,
-                                        fontSize: 11,
-                                      ),
+                                      style: TextStyle(color: AppColors.darkOnSurfaceVariant, fontSize: 11),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -213,6 +163,9 @@ class _ChannelCardState extends State<ChannelCard>
       return CachedNetworkImage(
         imageUrl: widget.channel.logoUrl!,
         fit: BoxFit.contain,
+        // Add memory limits for better performance on Android
+        memCacheWidth: 200,
+        memCacheHeight: 200,
         placeholder: (context, url) => _buildPlaceholder(),
         errorWidget: (context, url, error) => _buildPlaceholder(),
       );
@@ -223,13 +176,7 @@ class _ChannelCardState extends State<ChannelCard>
   Widget _buildPlaceholder() {
     return Container(
       color: AppColors.darkSurface,
-      child: Center(
-        child: Icon(
-          Icons.tv_rounded,
-          size: 36,
-          color: AppColors.darkOnSurfaceMuted,
-        ),
-      ),
+      child: Center(child: Icon(Icons.tv_rounded, size: 36, color: AppColors.darkOnSurfaceMuted)),
     );
   }
 }
@@ -240,21 +187,15 @@ class _LiveIndicator extends StatefulWidget {
   State<_LiveIndicator> createState() => _LiveIndicatorState();
 }
 
-class _LiveIndicatorState extends State<_LiveIndicator>
-    with SingleTickerProviderStateMixin {
+class _LiveIndicatorState extends State<_LiveIndicator> with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _pulseAnimation;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    )..repeat(reverse: true);
-    _pulseAnimation = Tween<double>(begin: 0.6, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _controller = AnimationController(duration: const Duration(milliseconds: 1500), vsync: this)..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(begin: 0.6, end: 1.0).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -273,15 +214,7 @@ class _LiveIndicatorState extends State<_LiveIndicator>
           decoration: BoxDecoration(
             color: AppColors.live.withValues(alpha: 0.9),
             borderRadius: BorderRadius.circular(4),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.live.withValues(
-                  alpha: 0.4 * _pulseAnimation.value,
-                ),
-                blurRadius: 8,
-                spreadRadius: 1,
-              ),
-            ],
+            boxShadow: [BoxShadow(color: AppColors.live.withValues(alpha: 0.4 * _pulseAnimation.value), blurRadius: 8, spreadRadius: 1)],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -292,25 +225,13 @@ class _LiveIndicatorState extends State<_LiveIndicator>
                 decoration: BoxDecoration(
                   color: Colors.white,
                   shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.white.withValues(
-                        alpha: 0.5 * _pulseAnimation.value,
-                      ),
-                      blurRadius: 4,
-                    ),
-                  ],
+                  boxShadow: [BoxShadow(color: Colors.white.withValues(alpha: 0.5 * _pulseAnimation.value), blurRadius: 4)],
                 ),
               ),
               const SizedBox(width: 4),
               Text(
                 'LIVE',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5,
-                ),
+                style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 0.5),
               ),
             ],
           ),
@@ -327,13 +248,7 @@ class ChannelListTile extends StatefulWidget {
   final VoidCallback? onFavorite;
   final VoidCallback? onLongPress;
 
-  const ChannelListTile({
-    super.key,
-    required this.channel,
-    required this.onTap,
-    this.onFavorite,
-    this.onLongPress,
-  });
+  const ChannelListTile({super.key, required this.channel, required this.onTap, this.onFavorite, this.onLongPress});
 
   @override
   State<ChannelListTile> createState() => _ChannelListTileState();
@@ -351,13 +266,9 @@ class _ChannelListTileState extends State<ChannelListTile> {
         duration: const Duration(milliseconds: 200),
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         decoration: BoxDecoration(
-          color: _isHovered
-              ? AppColors.darkSurfaceHover
-              : AppColors.darkSurfaceVariant,
+          color: _isHovered ? AppColors.darkSurfaceHover : AppColors.darkSurfaceVariant,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: _isHovered ? AppColors.primary.withValues(alpha: 0.3) : AppColors.darkBorder,
-          ),
+          border: Border.all(color: _isHovered ? AppColors.primary.withValues(alpha: 0.3) : AppColors.darkBorder),
         ),
         child: Material(
           color: Colors.transparent,
@@ -375,10 +286,7 @@ class _ChannelListTileState extends State<ChannelListTile> {
                     child: Container(
                       width: 56,
                       height: 56,
-                      decoration: BoxDecoration(
-                        color: AppColors.darkSurface,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                      decoration: BoxDecoration(color: AppColors.darkSurface, borderRadius: BorderRadius.circular(8)),
                       child: _buildLogo(),
                     ),
                   ),
@@ -393,33 +301,19 @@ class _ChannelListTileState extends State<ChannelListTile> {
                             Expanded(
                               child: Text(
                                 widget.channel.displayName,
-                                style: TextStyle(
-                                  color: AppColors.darkOnSurface,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                style: TextStyle(color: AppColors.darkOnSurface, fontSize: 15, fontWeight: FontWeight.w600),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            if (widget.channel.isFavorite) ...[
-                              const SizedBox(width: 8),
-                              Icon(
-                                Icons.favorite_rounded,
-                                color: AppColors.accent,
-                                size: 16,
-                              ),
-                            ],
+                            if (widget.channel.isFavorite) ...[const SizedBox(width: 8), Icon(Icons.favorite_rounded, color: AppColors.accent, size: 16)],
                           ],
                         ),
                         if (widget.channel.group != null) ...[
                           const SizedBox(height: 4),
                           Text(
                             widget.channel.group!,
-                            style: TextStyle(
-                              color: AppColors.darkOnSurfaceVariant,
-                              fontSize: 13,
-                            ),
+                            style: TextStyle(color: AppColors.darkOnSurfaceVariant, fontSize: 13),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -432,20 +326,10 @@ class _ChannelListTileState extends State<ChannelListTile> {
                   // Actions
                   if (widget.onFavorite != null)
                     IconButton(
-                      icon: Icon(
-                        widget.channel.isFavorite
-                            ? Icons.favorite_rounded
-                            : Icons.favorite_border_rounded,
-                        color: widget.channel.isFavorite
-                            ? AppColors.accent
-                            : AppColors.darkOnSurfaceMuted,
-                      ),
+                      icon: Icon(widget.channel.isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: widget.channel.isFavorite ? AppColors.accent : AppColors.darkOnSurfaceMuted),
                       onPressed: widget.onFavorite,
                     ),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppColors.darkOnSurfaceMuted,
-                  ),
+                  Icon(Icons.chevron_right_rounded, color: AppColors.darkOnSurfaceMuted),
                 ],
               ),
             ),
@@ -460,6 +344,9 @@ class _ChannelListTileState extends State<ChannelListTile> {
       return CachedNetworkImage(
         imageUrl: widget.channel.logoUrl!,
         fit: BoxFit.contain,
+        // Add memory limits for better performance on Android
+        memCacheWidth: 200,
+        memCacheHeight: 200,
         placeholder: (context, url) => _buildPlaceholder(),
         errorWidget: (context, url, error) => _buildPlaceholder(),
       );
@@ -468,13 +355,7 @@ class _ChannelListTileState extends State<ChannelListTile> {
   }
 
   Widget _buildPlaceholder() {
-    return Center(
-      child: Icon(
-        Icons.tv_rounded,
-        size: 24,
-        color: AppColors.darkOnSurfaceMuted,
-      ),
-    );
+    return Center(child: Icon(Icons.tv_rounded, size: 24, color: AppColors.darkOnSurfaceMuted));
   }
 }
 
@@ -486,10 +367,7 @@ class _ChannelCurrentProgram extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final programAsync = ref.watch(currentProgramProvider((
-      playlistId: channel.playlistId,
-      channelId: channel.epgId,
-    )));
+    final programAsync = ref.watch(currentProgramProvider((playlistId: channel.playlistId, channelId: channel.epgId)));
 
     return programAsync.when(
       data: (program) {
@@ -501,19 +379,13 @@ class _ChannelCurrentProgram extends ConsumerWidget {
               Container(
                 width: 6,
                 height: 6,
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  shape: BoxShape.circle,
-                ),
+                decoration: BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
               ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   program.title,
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: AppColors.primary, fontSize: 12),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),

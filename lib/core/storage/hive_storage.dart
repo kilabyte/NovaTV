@@ -5,6 +5,37 @@ import '../../hive_registrar.g.dart';
 import '../../features/playlist/data/models/playlist_model.dart';
 import '../../features/settings/data/models/app_settings_model.dart';
 
+/// Global helper to safely open a Hive box with retry logic for lock errors.
+/// Use this instead of Hive.openBox directly throughout the app.
+Future<Box<T>> safeOpenBox<T>(String boxName, {int maxRetries = 3}) async {
+  for (var attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      // Return existing box if already open
+      if (Hive.isBoxOpen(boxName)) {
+        return Hive.box<T>(boxName);
+      }
+      return await Hive.openBox<T>(boxName);
+    } catch (e) {
+      if (attempt < maxRetries - 1) {
+        // Wait with exponential backoff before retry
+        await Future.delayed(Duration(milliseconds: 100 * (attempt + 1)));
+        // Try to close if somehow half-open
+        if (Hive.isBoxOpen(boxName)) {
+          try {
+            await Hive.box(boxName).close();
+          } catch (_) {
+            // Ignore close errors
+          }
+        }
+      } else {
+        // Last attempt failed, rethrow
+        rethrow;
+      }
+    }
+  }
+  throw Exception('Failed to open box "$boxName" after $maxRetries attempts');
+}
+
 /// Hive implementation of local storage
 class HiveStorage implements LocalStorage {
   final Map<String, Box> _openBoxes = {};
@@ -18,15 +49,18 @@ class HiveStorage implements LocalStorage {
 
     // Pre-open essential boxes that are needed immediately at app startup
     // This ensures they're available when the router is created
-    await Hive.openBox<PlaylistModel>('playlists');
-    await Hive.openBox<AppSettingsModel>('app_settings');
+    await safeOpenBox<PlaylistModel>('playlists');
+    await safeOpenBox<AppSettingsModel>('app_settings');
   }
 
   Future<Box<T>> _getBox<T>(String boxName) async {
     if (_openBoxes.containsKey(boxName)) {
-      return _openBoxes[boxName] as Box<T>;
+      final box = _openBoxes[boxName];
+      if (box is Box<T> && box.isOpen) {
+        return box;
+      }
     }
-    final box = await Hive.openBox<T>(boxName);
+    final box = await safeOpenBox<T>(boxName);
     _openBoxes[boxName] = box;
     return box;
   }

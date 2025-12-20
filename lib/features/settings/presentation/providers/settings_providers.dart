@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce/hive.dart';
 
+import '../../../../core/storage/hive_storage.dart';
 import '../../data/models/app_settings_model.dart';
 
 /// Provider for the settings box
 final settingsBoxProvider = FutureProvider<Box<AppSettingsModel>>((ref) async {
-  return Hive.openBox<AppSettingsModel>('app_settings');
+  return safeOpenBox<AppSettingsModel>('app_settings');
 });
 
 /// Provider for current app settings

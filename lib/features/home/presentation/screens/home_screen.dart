@@ -36,14 +36,10 @@ class HomeScreen extends ConsumerWidget {
               _HomeHeader(),
 
               // Continue Watching Section
-              SliverToBoxAdapter(
-                child: _ContinueWatchingSection(),
-              ),
+              SliverToBoxAdapter(child: _ContinueWatchingSection()),
 
               // Quick Actions Row
-              SliverToBoxAdapter(
-                child: _QuickActionsRow(),
-              ),
+              SliverToBoxAdapter(child: _QuickActionsRow()),
 
               // Favorites Grid
               SliverToBoxAdapter(
@@ -55,14 +51,10 @@ class HomeScreen extends ConsumerWidget {
               ),
 
               // What's On Now
-              SliverToBoxAdapter(
-                child: _WhatsOnNowSection(),
-              ),
+              SliverToBoxAdapter(child: _WhatsOnNowSection()),
 
               // Bottom Padding for navigation bar
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 100),
-              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 100)),
             ],
           );
         },
@@ -96,14 +88,7 @@ class _HomeHeader extends StatelessWidget {
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withValues(alpha: 0.4),
-                  Colors.transparent,
-                ],
-              ),
+              gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.black.withValues(alpha: 0.4), Colors.transparent]),
             ),
           ),
         ),
@@ -112,26 +97,16 @@ class _HomeHeader extends StatelessWidget {
         children: [
           // Gradient title
           ShaderMask(
-            shaderCallback: (bounds) => const LinearGradient(
-              colors: [AppColors.primary, AppColors.auroraPurple],
-            ).createShader(bounds),
+            shaderCallback: (bounds) => const LinearGradient(colors: [AppColors.primary, AppColors.auroraPurple]).createShader(bounds),
             child: const Text(
               'Home',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.5,
-              ),
+              style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700, letterSpacing: -0.5),
             ),
           ),
         ],
       ),
       actions: [
-        GlassIconButton(
-          icon: Icons.search_rounded,
-          onPressed: () => context.push(Routes.search),
-        ),
+        GlassIconButton(icon: Icons.search_rounded, onPressed: () => context.push(Routes.search)),
         const SizedBox(width: 12),
       ],
     );
@@ -191,17 +166,7 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            decoration: BoxDecoration(
-              boxShadow: _isHovered
-                  ? [
-                      BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.3),
-                        blurRadius: 30,
-                        spreadRadius: -5,
-                      ),
-                    ]
-                  : null,
-            ),
+            decoration: BoxDecoration(boxShadow: _isHovered ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.3), blurRadius: 30, spreadRadius: -5)] : null),
             child: GlassCard(
               blur: 25,
               opacity: 0.12,
@@ -217,18 +182,17 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
                       height: 100,
                       decoration: BoxDecoration(
                         color: AppColors.glassBackgroundMedium,
-                        borderRadius: const BorderRadius.horizontal(
-                          left: Radius.circular(15),
-                        ),
+                        borderRadius: const BorderRadius.horizontal(left: Radius.circular(15)),
                       ),
                       child: widget.channel.logoUrl != null
                           ? ClipRRect(
-                              borderRadius: const BorderRadius.horizontal(
-                                left: Radius.circular(15),
-                              ),
+                              borderRadius: const BorderRadius.horizontal(left: Radius.circular(15)),
                               child: CachedNetworkImage(
                                 imageUrl: widget.channel.logoUrl!,
                                 fit: BoxFit.contain,
+                                // Add memory limits for better performance on Android
+                                memCacheWidth: 100,
+                                memCacheHeight: 100,
                                 errorWidget: (_, __, ___) => _buildPlaceholder(),
                               ),
                             )
@@ -245,41 +209,20 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
                             // Glowing label
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
+                              decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)),
                               child: Text(
                                 'CONTINUE WATCHING',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.primary,
-                                  letterSpacing: 0.8,
-                                ),
+                                style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.primary, letterSpacing: 0.8),
                               ),
                             ),
                             const SizedBox(height: 8),
                             Text(
                               widget.channel.displayName,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.darkOnSurface,
-                              ),
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.darkOnSurface),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            if (widget.channel.group != null) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                widget.channel.group!,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: AppColors.darkOnSurfaceVariant,
-                                ),
-                              ),
-                            ],
+                            if (widget.channel.group != null) ...[const SizedBox(height: 2), Text(widget.channel.group!, style: TextStyle(fontSize: 13, color: AppColors.darkOnSurfaceVariant))],
                           ],
                         ),
                       ),
@@ -293,15 +236,8 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
                         child: Container(
                           width: 48,
                           height: 48,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary,
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          child: const Icon(
-                            Icons.play_arrow_rounded,
-                            color: Colors.white,
-                            size: 28,
-                          ),
+                          decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(24)),
+                          child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 28),
                         ),
                       ),
                     ),
@@ -316,13 +252,7 @@ class _ContinueWatchingCardState extends State<_ContinueWatchingCard> {
   }
 
   Widget _buildPlaceholder() {
-    return Center(
-      child: Icon(
-        Icons.tv_rounded,
-        size: 32,
-        color: AppColors.darkOnSurfaceMuted,
-      ),
-    );
+    return Center(child: Icon(Icons.tv_rounded, size: 32, color: AppColors.darkOnSurfaceMuted));
   }
 }
 
@@ -337,30 +267,15 @@ class _QuickActionsRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: _GlassQuickActionButton(
-              icon: Icons.live_tv_rounded,
-              label: 'Live TV',
-              color: AppColors.primary,
-              onTap: () => context.go(Routes.channels),
-            ),
+            child: _GlassQuickActionButton(icon: Icons.live_tv_rounded, label: 'Live TV', color: AppColors.primary, onTap: () => context.go(Routes.channels)),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: _GlassQuickActionButton(
-              icon: Icons.calendar_month_rounded,
-              label: 'Guide',
-              color: AppColors.auroraPurple,
-              onTap: () => context.go(Routes.tvGuide),
-            ),
+            child: _GlassQuickActionButton(icon: Icons.calendar_month_rounded, label: 'Guide', color: AppColors.auroraPurple, onTap: () => context.go(Routes.tvGuide)),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: _GlassQuickActionButton(
-              icon: Icons.playlist_play_rounded,
-              label: 'Playlists',
-              color: AppColors.secondary,
-              onTap: () => context.go(Routes.playlists),
-            ),
+            child: _GlassQuickActionButton(icon: Icons.playlist_play_rounded, label: 'Playlists', color: AppColors.secondary, onTap: () => context.go(Routes.playlists)),
           ),
         ],
       ),
@@ -374,12 +289,7 @@ class _GlassQuickActionButton extends StatefulWidget {
   final Color color;
   final VoidCallback onTap;
 
-  const _GlassQuickActionButton({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
+  const _GlassQuickActionButton({required this.icon, required this.label, required this.color, required this.onTap});
 
   @override
   State<_GlassQuickActionButton> createState() => _GlassQuickActionButtonState();
@@ -400,17 +310,7 @@ class _GlassQuickActionButtonState extends State<_GlassQuickActionButton> {
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          decoration: BoxDecoration(
-            boxShadow: _isHovered
-                ? [
-                    BoxShadow(
-                      color: widget.color.withValues(alpha: 0.4),
-                      blurRadius: 25,
-                      spreadRadius: -5,
-                    ),
-                  ]
-                : null,
-          ),
+          decoration: BoxDecoration(boxShadow: _isHovered ? [BoxShadow(color: widget.color.withValues(alpha: 0.4), blurRadius: 25, spreadRadius: -5)] : null),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(16),
             child: BackdropFilter(
@@ -419,43 +319,18 @@ class _GlassQuickActionButtonState extends State<_GlassQuickActionButton> {
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(vertical: 18),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: _isHovered
-                        ? [
-                            widget.color.withValues(alpha: 0.25),
-                            widget.color.withValues(alpha: 0.12),
-                          ]
-                        : [
-                            Colors.white.withValues(alpha: 0.12),
-                            Colors.white.withValues(alpha: 0.06),
-                          ],
-                  ),
+                  gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: _isHovered ? [widget.color.withValues(alpha: 0.25), widget.color.withValues(alpha: 0.12)] : [Colors.white.withValues(alpha: 0.12), Colors.white.withValues(alpha: 0.06)]),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: _isHovered
-                        ? widget.color.withValues(alpha: 0.5)
-                        : AppColors.glassBorder,
-                    width: 1,
-                  ),
+                  border: Border.all(color: _isHovered ? widget.color.withValues(alpha: 0.5) : AppColors.glassBorder, width: 1),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      widget.icon,
-                      color: widget.color,
-                      size: 30,
-                    ),
+                    Icon(widget.icon, color: widget.color, size: 30),
                     const SizedBox(height: 10),
                     Text(
                       widget.label,
-                      style: TextStyle(
-                        color: _isHovered ? widget.color : AppColors.darkOnSurface,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: TextStyle(color: _isHovered ? widget.color : AppColors.darkOnSurface, fontSize: 13, fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -493,20 +368,12 @@ class _FavoritesGrid extends StatelessWidget {
                   GlowContainer(
                     glowColor: AppColors.favorite,
                     glowRadius: 10,
-                    child: Icon(
-                      Icons.star_rounded,
-                      color: AppColors.favorite,
-                      size: 22,
-                    ),
+                    child: Icon(Icons.star_rounded, color: AppColors.favorite, size: 22),
                   ),
                   const SizedBox(width: 10),
                   Text(
                     'Favorites',
-                    style: TextStyle(
-                      color: AppColors.darkOnSurface,
-                      fontSize: 19,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(color: AppColors.darkOnSurface, fontSize: 19, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
@@ -514,17 +381,10 @@ class _FavoritesGrid extends StatelessWidget {
                 onTap: () => context.go(Routes.favorites),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+                  decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(20)),
                   child: Text(
                     'See All',
-                    style: TextStyle(
-                      color: AppColors.primary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
@@ -573,17 +433,7 @@ class _GlassFavoriteCardState extends State<_GlassFavoriteCard> {
           duration: const Duration(milliseconds: 200),
           width: 105,
           margin: const EdgeInsets.only(right: 12),
-          decoration: BoxDecoration(
-            boxShadow: _isHovered
-                ? [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.3),
-                      blurRadius: 20,
-                      spreadRadius: -5,
-                    ),
-                  ]
-                : null,
-          ),
+          decoration: BoxDecoration(boxShadow: _isHovered ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.3), blurRadius: 20, spreadRadius: -5)] : null),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
             child: BackdropFilter(
@@ -591,26 +441,9 @@ class _GlassFavoriteCardState extends State<_GlassFavoriteCard> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: _isHovered
-                        ? [
-                            AppColors.primary.withValues(alpha: 0.2),
-                            AppColors.primary.withValues(alpha: 0.08),
-                          ]
-                        : [
-                            Colors.white.withValues(alpha: 0.1),
-                            Colors.white.withValues(alpha: 0.05),
-                          ],
-                  ),
+                  gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: _isHovered ? [AppColors.primary.withValues(alpha: 0.2), AppColors.primary.withValues(alpha: 0.08)] : [Colors.white.withValues(alpha: 0.1), Colors.white.withValues(alpha: 0.05)]),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: _isHovered
-                        ? AppColors.primary.withValues(alpha: 0.4)
-                        : AppColors.glassBorder,
-                    width: 1,
-                  ),
+                  border: Border.all(color: _isHovered ? AppColors.primary.withValues(alpha: 0.4) : AppColors.glassBorder, width: 1),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -622,14 +455,7 @@ class _GlassFavoriteCardState extends State<_GlassFavoriteCard> {
                       decoration: BoxDecoration(
                         color: AppColors.glassBackgroundMedium,
                         borderRadius: BorderRadius.circular(12),
-                        boxShadow: _isHovered
-                            ? [
-                                BoxShadow(
-                                  color: AppColors.primary.withValues(alpha: 0.2),
-                                  blurRadius: 10,
-                                ),
-                              ]
-                            : null,
+                        boxShadow: _isHovered ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.2), blurRadius: 10)] : null,
                       ),
                       child: widget.channel.logoUrl != null
                           ? ClipRRect(
@@ -637,18 +463,10 @@ class _GlassFavoriteCardState extends State<_GlassFavoriteCard> {
                               child: CachedNetworkImage(
                                 imageUrl: widget.channel.logoUrl!,
                                 fit: BoxFit.contain,
-                                errorWidget: (_, __, ___) => Icon(
-                                  Icons.tv_rounded,
-                                  size: 26,
-                                  color: AppColors.darkOnSurfaceMuted,
-                                ),
+                                errorWidget: (_, __, ___) => Icon(Icons.tv_rounded, size: 26, color: AppColors.darkOnSurfaceMuted),
                               ),
                             )
-                          : Icon(
-                              Icons.tv_rounded,
-                              size: 26,
-                              color: AppColors.darkOnSurfaceMuted,
-                            ),
+                          : Icon(Icons.tv_rounded, size: 26, color: AppColors.darkOnSurfaceMuted),
                     ),
                     const SizedBox(height: 10),
                     // Name
@@ -656,13 +474,7 @@ class _GlassFavoriteCardState extends State<_GlassFavoriteCard> {
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       child: Text(
                         widget.channel.displayName,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: _isHovered
-                              ? AppColors.primary
-                              : AppColors.darkOnSurface,
-                        ),
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: _isHovered ? AppColors.primary : AppColors.darkOnSurface),
                         maxLines: 2,
                         textAlign: TextAlign.center,
                         overflow: TextOverflow.ellipsis,
@@ -711,22 +523,13 @@ class _WhatsOnNowSection extends ConsumerWidget {
                         decoration: BoxDecoration(
                           color: AppColors.live,
                           shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.live.withValues(alpha: 0.6),
-                              blurRadius: 8,
-                            ),
-                          ],
+                          boxShadow: [BoxShadow(color: AppColors.live.withValues(alpha: 0.6), blurRadius: 8)],
                         ),
                       ),
                       const SizedBox(width: 10),
                       Text(
                         "What's On Now",
-                        style: TextStyle(
-                          color: AppColors.darkOnSurface,
-                          fontSize: 19,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: TextStyle(color: AppColors.darkOnSurface, fontSize: 19, fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
@@ -734,17 +537,10 @@ class _WhatsOnNowSection extends ConsumerWidget {
                     onTap: () => context.go(Routes.tvGuide),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
+                      decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(20)),
                       child: Text(
                         'Full Guide',
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w600),
                       ),
                     ),
                   ),
@@ -757,10 +553,7 @@ class _WhatsOnNowSection extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: favorites.length > 5 ? 5 : favorites.length,
               itemBuilder: (context, index) {
-                return _GlassNowPlayingItem(
-                  playlistId: playlistId,
-                  channel: favorites[index],
-                );
+                return _GlassNowPlayingItem(playlistId: playlistId, channel: favorites[index]);
               },
             ),
           ],
@@ -776,10 +569,7 @@ class _GlassNowPlayingItem extends ConsumerStatefulWidget {
   final String playlistId;
   final Channel channel;
 
-  const _GlassNowPlayingItem({
-    required this.playlistId,
-    required this.channel,
-  });
+  const _GlassNowPlayingItem({required this.playlistId, required this.channel});
 
   @override
   ConsumerState<_GlassNowPlayingItem> createState() => _GlassNowPlayingItemState();
@@ -790,12 +580,7 @@ class _GlassNowPlayingItemState extends ConsumerState<_GlassNowPlayingItem> {
 
   @override
   Widget build(BuildContext context) {
-    final programAsync = ref.watch(
-      currentProgramProvider((
-        playlistId: widget.playlistId,
-        channelId: widget.channel.tvgId ?? widget.channel.id,
-      )),
-    );
+    final programAsync = ref.watch(currentProgramProvider((playlistId: widget.playlistId, channelId: widget.channel.tvgId ?? widget.channel.id)));
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -808,17 +593,7 @@ class _GlassNowPlayingItemState extends ConsumerState<_GlassNowPlayingItem> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           margin: const EdgeInsets.only(bottom: 10),
-          decoration: BoxDecoration(
-            boxShadow: _isHovered
-                ? [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.2),
-                      blurRadius: 20,
-                      spreadRadius: -5,
-                    ),
-                  ]
-                : null,
-          ),
+          decoration: BoxDecoration(boxShadow: _isHovered ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.2), blurRadius: 20, spreadRadius: -5)] : null),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
             child: BackdropFilter(
@@ -827,26 +602,9 @@ class _GlassNowPlayingItemState extends ConsumerState<_GlassNowPlayingItem> {
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: _isHovered
-                        ? [
-                            AppColors.primary.withValues(alpha: 0.15),
-                            AppColors.primary.withValues(alpha: 0.06),
-                          ]
-                        : [
-                            Colors.white.withValues(alpha: 0.08),
-                            Colors.white.withValues(alpha: 0.04),
-                          ],
-                  ),
+                  gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: _isHovered ? [AppColors.primary.withValues(alpha: 0.15), AppColors.primary.withValues(alpha: 0.06)] : [Colors.white.withValues(alpha: 0.08), Colors.white.withValues(alpha: 0.04)]),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: _isHovered
-                        ? AppColors.primary.withValues(alpha: 0.3)
-                        : AppColors.glassBorder,
-                    width: 1,
-                  ),
+                  border: Border.all(color: _isHovered ? AppColors.primary.withValues(alpha: 0.3) : AppColors.glassBorder, width: 1),
                 ),
                 child: Row(
                   children: [
@@ -854,28 +612,17 @@ class _GlassNowPlayingItemState extends ConsumerState<_GlassNowPlayingItem> {
                     Container(
                       width: 52,
                       height: 52,
-                      decoration: BoxDecoration(
-                        color: AppColors.glassBackgroundMedium,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
+                      decoration: BoxDecoration(color: AppColors.glassBackgroundMedium, borderRadius: BorderRadius.circular(10)),
                       child: widget.channel.logoUrl != null
                           ? ClipRRect(
                               borderRadius: BorderRadius.circular(10),
                               child: CachedNetworkImage(
                                 imageUrl: widget.channel.logoUrl!,
                                 fit: BoxFit.contain,
-                                errorWidget: (_, __, ___) => Icon(
-                                  Icons.tv_rounded,
-                                  size: 22,
-                                  color: AppColors.darkOnSurfaceMuted,
-                                ),
+                                errorWidget: (_, __, ___) => Icon(Icons.tv_rounded, size: 22, color: AppColors.darkOnSurfaceMuted),
                               ),
                             )
-                          : Icon(
-                              Icons.tv_rounded,
-                              size: 22,
-                              color: AppColors.darkOnSurfaceMuted,
-                            ),
+                          : Icon(Icons.tv_rounded, size: 22, color: AppColors.darkOnSurfaceMuted),
                     ),
                     const SizedBox(width: 14),
                     // Info
@@ -885,31 +632,15 @@ class _GlassNowPlayingItemState extends ConsumerState<_GlassNowPlayingItem> {
                         children: [
                           Text(
                             widget.channel.displayName,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 15,
-                              color: AppColors.darkOnSurface,
-                            ),
+                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: AppColors.darkOnSurface),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 6),
                           programAsync.when(
                             data: (program) => _buildProgramInfo(program),
-                            loading: () => Text(
-                              'Loading...',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.darkOnSurfaceMuted,
-                              ),
-                            ),
-                            error: (_, __) => Text(
-                              'No program info',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.darkOnSurfaceMuted,
-                              ),
-                            ),
+                            loading: () => Text('Loading...', style: TextStyle(fontSize: 12, color: AppColors.darkOnSurfaceMuted)),
+                            error: (_, __) => Text('No program info', style: TextStyle(fontSize: 12, color: AppColors.darkOnSurfaceMuted)),
                           ),
                         ],
                       ),
@@ -918,11 +649,7 @@ class _GlassNowPlayingItemState extends ConsumerState<_GlassNowPlayingItem> {
                     GlowContainer(
                       glowColor: AppColors.primary,
                       glowRadius: _isHovered ? 15 : 8,
-                      child: Icon(
-                        Icons.play_circle_filled_rounded,
-                        color: AppColors.primary,
-                        size: 36,
-                      ),
+                      child: Icon(Icons.play_circle_filled_rounded, color: AppColors.primary, size: 36),
                     ),
                   ],
                 ),
@@ -936,13 +663,7 @@ class _GlassNowPlayingItemState extends ConsumerState<_GlassNowPlayingItem> {
 
   Widget _buildProgramInfo(Program? program) {
     if (program == null) {
-      return Text(
-        'No program info',
-        style: TextStyle(
-          fontSize: 12,
-          color: AppColors.darkOnSurfaceMuted,
-        ),
-      );
+      return Text('No program info', style: TextStyle(fontSize: 12, color: AppColors.darkOnSurfaceMuted));
     }
 
     return Column(
@@ -950,11 +671,7 @@ class _GlassNowPlayingItemState extends ConsumerState<_GlassNowPlayingItem> {
       children: [
         Text(
           program.title,
-          style: TextStyle(
-            fontSize: 12,
-            color: AppColors.primary,
-            fontWeight: FontWeight.w500,
-          ),
+          style: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w500),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -964,10 +681,7 @@ class _GlassNowPlayingItemState extends ConsumerState<_GlassNowPlayingItem> {
           children: [
             Container(
               height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.glassBackgroundMedium,
-                borderRadius: BorderRadius.circular(2),
-              ),
+              decoration: BoxDecoration(color: AppColors.glassBackgroundMedium, borderRadius: BorderRadius.circular(2)),
             ),
             FractionallySizedBox(
               widthFactor: program.progress,
@@ -976,12 +690,7 @@ class _GlassNowPlayingItemState extends ConsumerState<_GlassNowPlayingItem> {
                 decoration: BoxDecoration(
                   color: AppColors.primary,
                   borderRadius: BorderRadius.circular(2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.5),
-                      blurRadius: 6,
-                    ),
-                  ],
+                  boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.5), blurRadius: 6)],
                 ),
               ),
             ),
@@ -1016,40 +725,23 @@ class _WelcomeScreen extends StatelessWidget {
                 child: Container(
                   width: 90,
                   height: 90,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: const Icon(
-                    Icons.live_tv_rounded,
-                    color: Colors.white,
-                    size: 48,
-                  ),
+                  decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(24)),
+                  child: const Icon(Icons.live_tv_rounded, color: Colors.white, size: 48),
                 ),
               ),
               const SizedBox(height: 32),
               // Gradient text
               ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [AppColors.primary, AppColors.auroraPurple],
-                ).createShader(bounds),
+                shaderCallback: (bounds) => const LinearGradient(colors: [AppColors.primary, AppColors.auroraPurple]).createShader(bounds),
                 child: const Text(
                   'Welcome to NovaIPTV',
-                  style: TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: -0.5,
-                  ),
+                  style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: -0.5),
                 ),
               ),
               const SizedBox(height: 12),
               Text(
                 'Stream your favorite channels anywhere',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: AppColors.darkOnSurfaceVariant,
-                ),
+                style: TextStyle(fontSize: 16, color: AppColors.darkOnSurfaceVariant),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 40),
@@ -1066,23 +758,13 @@ class _WelcomeScreen extends StatelessWidget {
                     const SizedBox(width: 10),
                     Text(
                       'Add Your First Playlist',
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: TextStyle(color: AppColors.primary, fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 20),
-              Text(
-                'Add an M3U/M3U8 playlist URL to start streaming',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppColors.darkOnSurfaceMuted,
-                ),
-              ),
+              Text('Add an M3U/M3U8 playlist URL to start streaming', style: TextStyle(fontSize: 13, color: AppColors.darkOnSurfaceMuted)),
             ],
           ),
         ),
@@ -1116,27 +798,17 @@ class _ErrorScreen extends StatelessWidget {
               GlowContainer(
                 glowColor: AppColors.error,
                 glowRadius: 20,
-                child: Icon(
-                  Icons.error_outline_rounded,
-                  size: 64,
-                  color: AppColors.error,
-                ),
+                child: Icon(Icons.error_outline_rounded, size: 64, color: AppColors.error),
               ),
               const SizedBox(height: 20),
               Text(
                 'Something went wrong',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.darkOnSurface,
-                ),
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: AppColors.darkOnSurface),
               ),
               const SizedBox(height: 10),
               Text(
                 error,
-                style: TextStyle(
-                  color: AppColors.darkOnSurfaceVariant,
-                ),
+                style: TextStyle(color: AppColors.darkOnSurfaceVariant),
                 textAlign: TextAlign.center,
               ),
             ],

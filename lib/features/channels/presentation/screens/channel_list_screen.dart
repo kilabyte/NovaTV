@@ -38,9 +38,7 @@ class ChannelListScreen extends ConsumerWidget {
             child: channelsAsync.when(
               data: (channels) {
                 if (channels.isEmpty) {
-                  return _EmptyState(
-                    hasPlaylist: playlistsAsync.valueOrNull?.isNotEmpty ?? false,
-                  );
+                  return _EmptyState(hasPlaylist: playlistsAsync.valueOrNull?.isNotEmpty ?? false);
                 }
 
                 final playlistId = playlistsAsync.valueOrNull?.firstOrNull?.id ?? '';
@@ -49,16 +47,14 @@ class ChannelListScreen extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   itemCount: channels.length,
                   itemBuilder: (context, index) {
-                    return _ChannelRow(
-                      channel: channels[index],
-                      playlistId: playlistId,
+                    // Wrap in RepaintBoundary to isolate repaints and improve scrolling performance
+                    return RepaintBoundary(
+                      child: _ChannelRow(channel: channels[index], playlistId: playlistId),
                     );
                   },
                 );
               },
-              loading: () => const Center(
-                child: CircularProgressIndicator(color: AppColors.primary),
-              ),
+              loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
               error: (error, _) => _ErrorState(error: error.toString()),
             ),
           ),
@@ -76,10 +72,7 @@ class _ChannelHeader extends StatelessWidget {
   final String? selectedGroup;
   final VoidCallback onGroupCleared;
 
-  const _ChannelHeader({
-    required this.selectedGroup,
-    required this.onGroupCleared,
-  });
+  const _ChannelHeader({required this.selectedGroup, required this.onGroupCleared});
 
   @override
   Widget build(BuildContext context) {
@@ -94,11 +87,7 @@ class _ChannelHeader extends StatelessWidget {
           // Title
           Text(
             selectedGroup ?? 'All Channels',
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.w600),
           ),
 
           // Clear filter button if group selected
@@ -108,22 +97,13 @@ class _ChannelHeader extends StatelessWidget {
               onTap: onGroupCleared,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceElevated,
-                  borderRadius: BorderRadius.circular(4),
-                ),
+                decoration: BoxDecoration(color: AppColors.surfaceElevated, borderRadius: BorderRadius.circular(4)),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: const [
                     Icon(Icons.close, size: 14, color: AppColors.textSecondary),
                     SizedBox(width: 4),
-                    Text(
-                      'Clear',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
+                    Text('Clear', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
                   ],
                 ),
               ),
@@ -133,11 +113,7 @@ class _ChannelHeader extends StatelessWidget {
           const Spacer(),
 
           // Search button
-          IconButton(
-            icon: const Icon(Icons.search_rounded),
-            color: AppColors.textSecondary,
-            onPressed: () => context.push(Routes.search),
-          ),
+          IconButton(icon: const Icon(Icons.search_rounded), color: AppColors.textSecondary, onPressed: () => context.push(Routes.search)),
         ],
       ),
     );
@@ -152,10 +128,7 @@ class _ChannelRow extends ConsumerStatefulWidget {
   final Channel channel;
   final String playlistId;
 
-  const _ChannelRow({
-    required this.channel,
-    required this.playlistId,
-  });
+  const _ChannelRow({required this.channel, required this.playlistId});
 
   @override
   ConsumerState<_ChannelRow> createState() => _ChannelRowState();
@@ -166,12 +139,7 @@ class _ChannelRowState extends ConsumerState<_ChannelRow> {
 
   @override
   Widget build(BuildContext context) {
-    final programAsync = ref.watch(
-      currentProgramProvider((
-        playlistId: widget.playlistId,
-        channelId: widget.channel.tvgId ?? widget.channel.id,
-      )),
-    );
+    final programAsync = ref.watch(currentProgramProvider((playlistId: widget.playlistId, channelId: widget.channel.tvgId ?? widget.channel.id)));
 
     final isFavorite = ref.watch(isFavoriteProvider(widget.channel.id)).valueOrNull ?? false;
 
@@ -187,25 +155,22 @@ class _ChannelRowState extends ConsumerState<_ChannelRow> {
           duration: const Duration(milliseconds: 100),
           margin: const EdgeInsets.only(bottom: 2),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: _isHovered ? AppColors.surfaceHover : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-          ),
+          decoration: BoxDecoration(color: _isHovered ? AppColors.surfaceHover : Colors.transparent, borderRadius: BorderRadius.circular(8)),
           child: Row(
             children: [
               // Channel logo
               Container(
                 width: 48,
                 height: 48,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceElevated,
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                decoration: BoxDecoration(color: AppColors.surfaceElevated, borderRadius: BorderRadius.circular(8)),
                 clipBehavior: Clip.antiAlias,
                 child: widget.channel.logoUrl != null
                     ? CachedNetworkImage(
                         imageUrl: widget.channel.logoUrl!,
                         fit: BoxFit.contain,
+                        // Add memory limits for better performance on Android
+                        memCacheWidth: 48,
+                        memCacheHeight: 48,
                         errorWidget: (_, __, ___) => _LogoPlaceholder(),
                       )
                     : _LogoPlaceholder(),
@@ -224,11 +189,7 @@ class _ChannelRowState extends ConsumerState<_ChannelRow> {
                         Expanded(
                           child: Text(
                             widget.channel.displayName,
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                            ),
+                            style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -236,11 +197,7 @@ class _ChannelRowState extends ConsumerState<_ChannelRow> {
                         if (isFavorite)
                           const Padding(
                             padding: EdgeInsets.only(left: 8),
-                            child: Icon(
-                              Icons.star_rounded,
-                              size: 14,
-                              color: AppColors.favorite,
-                            ),
+                            child: Icon(Icons.star_rounded, size: 14, color: AppColors.favorite),
                           ),
                       ],
                     ),
@@ -250,20 +207,8 @@ class _ChannelRowState extends ConsumerState<_ChannelRow> {
                     // Current program info
                     programAsync.when(
                       data: (program) => _ProgramInfo(program: program),
-                      loading: () => const Text(
-                        'Loading...',
-                        style: TextStyle(
-                          color: AppColors.textMuted,
-                          fontSize: 13,
-                        ),
-                      ),
-                      error: (_, __) => Text(
-                        widget.channel.group ?? 'No program info',
-                        style: const TextStyle(
-                          color: AppColors.textMuted,
-                          fontSize: 13,
-                        ),
-                      ),
+                      loading: () => const Text('Loading...', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                      error: (_, __) => Text(widget.channel.group ?? 'No program info', style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
                     ),
                   ],
                 ),
@@ -275,9 +220,7 @@ class _ChannelRowState extends ConsumerState<_ChannelRow> {
               SizedBox(
                 width: 80,
                 child: programAsync.when(
-                  data: (program) => program != null
-                      ? _ProgressBar(progress: program.progress)
-                      : const SizedBox(),
+                  data: (program) => program != null ? _ProgressBar(progress: program.progress) : const SizedBox(),
                   loading: () => const SizedBox(),
                   error: (_, __) => const SizedBox(),
                 ),
@@ -292,10 +235,7 @@ class _ChannelRowState extends ConsumerState<_ChannelRow> {
                   data: (program) => program != null
                       ? Text(
                           _formatTimeRemaining(program.end),
-                          style: const TextStyle(
-                            color: AppColors.textMuted,
-                            fontSize: 12,
-                          ),
+                          style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
                           textAlign: TextAlign.right,
                         )
                       : const SizedBox(),
@@ -312,11 +252,7 @@ class _ChannelRowState extends ConsumerState<_ChannelRow> {
                     HapticFeedback.selectionClick();
                     ref.read(toggleFavoriteProvider(widget.channel.id));
                   },
-                  child: Icon(
-                    isFavorite ? Icons.star_rounded : Icons.star_outline_rounded,
-                    size: 20,
-                    color: isFavorite ? AppColors.favorite : AppColors.textMuted,
-                  ),
+                  child: Icon(isFavorite ? Icons.star_rounded : Icons.star_outline_rounded, size: 20, color: isFavorite ? AppColors.favorite : AppColors.textMuted),
                 ),
               ],
             ],
@@ -344,21 +280,12 @@ class _ProgramInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (program == null) {
-      return const Text(
-        'No program info',
-        style: TextStyle(
-          color: AppColors.textMuted,
-          fontSize: 13,
-        ),
-      );
+      return const Text('No program info', style: TextStyle(color: AppColors.textMuted, fontSize: 13));
     }
 
     return Text(
       program!.title,
-      style: const TextStyle(
-        color: AppColors.primary,
-        fontSize: 13,
-      ),
+      style: const TextStyle(color: AppColors.primary, fontSize: 13),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
     );
@@ -374,18 +301,12 @@ class _ProgressBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 4,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(2),
-      ),
+      decoration: BoxDecoration(color: AppColors.surfaceElevated, borderRadius: BorderRadius.circular(2)),
       child: FractionallySizedBox(
         alignment: Alignment.centerLeft,
         widthFactor: progress.clamp(0.0, 1.0),
         child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.primary,
-            borderRadius: BorderRadius.circular(2),
-          ),
+          decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(2)),
         ),
       ),
     );
@@ -395,13 +316,7 @@ class _ProgressBar extends StatelessWidget {
 class _LogoPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Icon(
-        Icons.tv_rounded,
-        size: 20,
-        color: AppColors.textMuted,
-      ),
-    );
+    return const Center(child: Icon(Icons.tv_rounded, size: 20, color: AppColors.textMuted));
   }
 }
 
@@ -422,28 +337,18 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              hasPlaylist ? Icons.live_tv_rounded : Icons.playlist_add_rounded,
-              size: 48,
-              color: AppColors.textMuted,
-            ),
+            Icon(hasPlaylist ? Icons.live_tv_rounded : Icons.playlist_add_rounded, size: 48, color: AppColors.textMuted),
             const SizedBox(height: 16),
             Text(
               hasPlaylist ? 'No channels found' : 'Add a playlist to get started',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 16,
-              ),
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 16),
               textAlign: TextAlign.center,
             ),
             if (!hasPlaylist) ...[
               const SizedBox(height: 24),
               TextButton(
                 onPressed: () => context.go('${Routes.playlists}/add'),
-                child: const Text(
-                  'Add Playlist',
-                  style: TextStyle(color: AppColors.primary),
-                ),
+                child: const Text('Add Playlist', style: TextStyle(color: AppColors.primary)),
               ),
             ],
           ],
@@ -466,27 +371,16 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              size: 48,
-              color: AppColors.error,
-            ),
+            const Icon(Icons.error_outline_rounded, size: 48, color: AppColors.error),
             const SizedBox(height: 16),
             const Text(
               'Failed to load channels',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 8),
             Text(
               error,
-              style: const TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 14,
-              ),
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 14),
               textAlign: TextAlign.center,
             ),
           ],

@@ -32,20 +32,10 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
     final channel = playerState.channel;
 
     // Get current program if available
-    final currentProgram = channel != null
-        ? ref.watch(currentProgramProvider((
-            playlistId: channel.playlistId,
-            channelId: channel.epgId,
-          )))
-        : null;
+    final currentProgram = channel != null ? ref.watch(currentProgramProvider((playlistId: channel.playlistId, channelId: channel.epgId))) : null;
 
     // Get next program
-    final nextProgram = channel != null
-        ? ref.watch(nextProgramProvider((
-            playlistId: channel.playlistId,
-            channelId: channel.epgId,
-          )))
-        : null;
+    final nextProgram = channel != null ? ref.watch(nextProgramProvider((playlistId: channel.playlistId, channelId: channel.epgId))) : null;
 
     return Positioned(
       right: 16,
@@ -65,22 +55,10 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
             decoration: BoxDecoration(
               color: AppColors.surface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _isHovered ? AppColors.primary : AppColors.border,
-                width: _isHovered ? 2 : 1,
-              ),
+              border: Border.all(color: _isHovered ? AppColors.primary : AppColors.border, width: _isHovered ? 2 : 1),
               boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.5),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                ),
-                if (_isHovered)
-                  BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.3),
-                    blurRadius: 20,
-                    offset: const Offset(0, 4),
-                  ),
+                BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 20, offset: const Offset(0, 8)),
+                if (_isHovered) BoxShadow(color: AppColors.primary.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 4)),
               ],
             ),
             clipBehavior: Clip.antiAlias,
@@ -99,25 +77,15 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                           children: [
                             // Video
                             Positioned.fill(
-                              child: Video(
-                                controller: playerState.controller!,
-                                fit: BoxFit.cover,
-                                controls: NoVideoControls,
-                              ),
+                              child: Video(controller: playerState.controller!, fit: BoxFit.cover, controls: NoVideoControls),
                             ),
                             // Live badge
                             Positioned(
                               top: 6,
                               left: 6,
                               child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.live,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(color: AppColors.live, borderRadius: BorderRadius.circular(4)),
                                 child: const Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -125,11 +93,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                                     SizedBox(width: 3),
                                     Text(
                                       'LIVE',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 8,
-                                        fontWeight: FontWeight.w700,
-                                      ),
+                                      style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700),
                                     ),
                                   ],
                                 ),
@@ -153,21 +117,14 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                                   Container(
                                     width: 24,
                                     height: 24,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.surfaceElevated,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
+                                    decoration: BoxDecoration(color: AppColors.surfaceElevated, borderRadius: BorderRadius.circular(4)),
                                     child: _buildChannelLogo(channel),
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
                                       channel?.displayName ?? 'Unknown',
-                                      style: const TextStyle(
-                                        color: AppColors.textPrimary,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -179,41 +136,21 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                               if (currentProgram?.value != null) ...[
                                 Text(
                                   currentProgram!.value!.title,
-                                  style: const TextStyle(
-                                    color: AppColors.textPrimary,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w500),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 2),
-                                Text(
-                                  '${_formatTime(currentProgram.value!.start)} - ${_formatTime(currentProgram.value!.end)} • ${currentProgram.value!.durationMinutes} min',
-                                  style: TextStyle(
-                                    color: AppColors.textMuted,
-                                    fontSize: 10,
-                                  ),
-                                  maxLines: 1,
-                                ),
+                                Text('${_formatTime(currentProgram.value!.start)} - ${_formatTime(currentProgram.value!.end)} • ${currentProgram.value!.durationMinutes} min', style: TextStyle(color: AppColors.textMuted, fontSize: 10), maxLines: 1),
                               ] else ...[
-                                Text(
-                                  'No program info',
-                                  style: TextStyle(
-                                    color: AppColors.textMuted,
-                                    fontSize: 11,
-                                  ),
-                                ),
+                                Text('No program info', style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
                               ],
                               // Up next
                               if (nextProgram?.value != null) ...[
                                 const SizedBox(height: 4),
                                 Text(
                                   '${_formatTime(nextProgram!.value!.start)} ${nextProgram.value!.title}',
-                                  style: TextStyle(
-                                    color: AppColors.textMuted,
-                                    fontSize: 10,
-                                  ),
+                                  style: TextStyle(color: AppColors.textMuted, fontSize: 10),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -230,9 +167,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                           children: [
                             // Play/Pause
                             _MiniPlayerButton(
-                              icon: playerState.isPlaying
-                                  ? Icons.pause_rounded
-                                  : Icons.play_arrow_rounded,
+                              icon: playerState.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
                               onTap: () {
                                 ref.read(playerProvider.notifier).togglePlayPause();
                               },
@@ -255,15 +190,9 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                   ),
                 ),
                 // Progress bar
-                if (currentProgram?.value != null)
-                  _buildProgressBar(currentProgram!.value!),
+                if (currentProgram?.value != null) _buildProgressBar(currentProgram!.value!),
                 // Buffering indicator
-                if (playerState.isBuffering)
-                  LinearProgressIndicator(
-                    minHeight: 2,
-                    backgroundColor: AppColors.surfaceElevated,
-                    valueColor: AlwaysStoppedAnimation(AppColors.primary),
-                  ),
+                if (playerState.isBuffering) LinearProgressIndicator(minHeight: 2, backgroundColor: AppColors.surfaceElevated, valueColor: AlwaysStoppedAnimation(AppColors.primary)),
               ],
             ),
           ),
@@ -279,19 +208,14 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
         child: Image.network(
           channel.logoUrl!,
           fit: BoxFit.contain,
-          errorBuilder: (_, __, ___) => Icon(
-            Icons.live_tv_rounded,
-            size: 14,
-            color: AppColors.textMuted,
-          ),
+          // Add caching for better performance
+          cacheWidth: 100,
+          cacheHeight: 100,
+          errorBuilder: (_, __, ___) => Icon(Icons.live_tv_rounded, size: 14, color: AppColors.textMuted),
         ),
       );
     }
-    return Icon(
-      Icons.live_tv_rounded,
-      size: 14,
-      color: AppColors.textMuted,
-    );
+    return Icon(Icons.live_tv_rounded, size: 14, color: AppColors.textMuted);
   }
 
   Widget _buildProgressBar(dynamic program) {
@@ -304,17 +228,11 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
 
     return Container(
       height: 3,
-      decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
-      ),
+      decoration: BoxDecoration(color: AppColors.surfaceElevated),
       child: FractionallySizedBox(
         alignment: Alignment.centerLeft,
         widthFactor: progress,
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.primary,
-          ),
-        ),
+        child: Container(decoration: BoxDecoration(color: AppColors.primary)),
       ),
     );
   }
@@ -332,12 +250,7 @@ class _MiniPlayerButton extends StatefulWidget {
   final String tooltip;
   final bool isPrimary;
 
-  const _MiniPlayerButton({
-    required this.icon,
-    required this.onTap,
-    required this.tooltip,
-    this.isPrimary = false,
-  });
+  const _MiniPlayerButton({required this.icon, required this.onTap, required this.tooltip, this.isPrimary = false});
 
   @override
   State<_MiniPlayerButton> createState() => _MiniPlayerButtonState();
@@ -363,15 +276,11 @@ class _MiniPlayerButtonState extends State<_MiniPlayerButton> {
               color: widget.isPrimary
                   ? AppColors.primary
                   : _isHovered
-                      ? AppColors.surfaceHover
-                      : AppColors.surfaceElevated,
+                  ? AppColors.surfaceHover
+                  : AppColors.surfaceElevated,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(
-              widget.icon,
-              color: widget.isPrimary ? Colors.black : AppColors.textPrimary,
-              size: 18,
-            ),
+            child: Icon(widget.icon, color: widget.isPrimary ? Colors.black : AppColors.textPrimary, size: 18),
           ),
         ),
       ),

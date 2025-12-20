@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -17,6 +20,24 @@ import '../widgets/program_details_sheet.dart';
 final tvGuideSelectedGroupProvider = Provider<String?>((ref) {
   return ref.watch(appSettingsProvider).lastTvGuideCategory;
 });
+
+/// Helper class for isolate communication (must be top-level for compute)
+/// Uses primitive types for serialization
+class _ProgramsProcessParams {
+  final List<Program> programs;
+  final List<String> channelIds;
+  final List<String> channelTvgIds;
+  final DateTime startTime;
+  final DateTime endTime;
+
+  _ProgramsProcessParams({
+    required this.programs,
+    required this.channelIds,
+    required this.channelTvgIds,
+    required this.startTime,
+    required this.endTime,
+  });
+}
 
 /// Clean TV Guide screen with solid dark design
 class TvGuideScreen extends ConsumerStatefulWidget {
@@ -44,6 +65,9 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
 
   // Base date is yesterday at 00:00
   late DateTime _baseDate;
+  
+  // Debounce timer for scroll events to reduce rebuilds
+  Timer? _scrollDebounceTimer;
 
   @override
   void initState() {
@@ -61,8 +85,9 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     _channelColumnController = _verticalControllerGroup.addAndGet();
     _programGridVerticalController = _verticalControllerGroup.addAndGet();
 
-    // Add scroll listener to update selected date as user scrolls
-    _timeHeaderController.addListener(_onHorizontalScroll);
+    // Add debounced scroll listener to update selected date as user scrolls
+    // Debounce reduces rebuilds during fast scrolling
+    _timeHeaderController.addListener(_onHorizontalScrollDebounced);
 
     _scrollToCurrentTimeWithRetry();
     
@@ -71,7 +96,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       _refreshEpgOnOpen();
     });
   }
-
+  
   /// Refresh EPG data when TV Guide screen is opened
   /// Runs in background to avoid blocking UI
   void _refreshEpgOnOpen() {
@@ -138,26 +163,34 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     }
   }
 
-  void _onHorizontalScroll() {
-    if (!_timeHeaderController.hasClients) return;
+  /// Debounced scroll handler to reduce rebuilds during fast scrolling
+  void _onHorizontalScrollDebounced() {
+    // Cancel existing timer
+    _scrollDebounceTimer?.cancel();
+    
+    // Set new timer - only update state after scrolling stops for 150ms
+    _scrollDebounceTimer = Timer(const Duration(milliseconds: 150), () {
+      if (!mounted || !_timeHeaderController.hasClients) return;
 
-    // Calculate which day is currently visible at the center of the screen
-    final offset = _timeHeaderController.offset;
-    final minutesSinceBase = ((offset + 200) / _hourWidth) * 60; // +200 for ~center of screen
-    final dateFromScroll = _baseDate.add(Duration(minutes: minutesSinceBase.toInt()));
-    final dayDate = DateTime(dateFromScroll.year, dateFromScroll.month, dateFromScroll.day);
+      // Calculate which day is currently visible at the center of the screen
+      final offset = _timeHeaderController.offset;
+      final minutesSinceBase = ((offset + 200) / _hourWidth) * 60; // +200 for ~center of screen
+      final dateFromScroll = _baseDate.add(Duration(minutes: minutesSinceBase.toInt()));
+      final dayDate = DateTime(dateFromScroll.year, dateFromScroll.month, dateFromScroll.day);
 
-    // Update the selectedDateProvider if it changed
-    final currentSelected = ref.read(selectedDateProvider);
-    if (dayDate.year != currentSelected.year ||
-        dayDate.month != currentSelected.month ||
-        dayDate.day != currentSelected.day) {
-      ref.read(selectedDateProvider.notifier).state = dayDate;
-    }
+      // Update the selectedDateProvider if it changed
+      final currentSelected = ref.read(selectedDateProvider);
+      if (dayDate.year != currentSelected.year ||
+          dayDate.month != currentSelected.month ||
+          dayDate.day != currentSelected.day) {
+        ref.read(selectedDateProvider.notifier).state = dayDate;
+      }
+    });
   }
 
   @override
   void dispose() {
+    _scrollDebounceTimer?.cancel();
     _timeHeaderController.dispose();
     _programGridController.dispose();
     _channelColumnController.dispose();
@@ -392,38 +425,140 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       BuildContext context, List<Channel> channels, DateTime startTime) {
     final playlists = ref.watch(playlistNotifierProvider);
     final playlistId = playlists.valueOrNull?.firstOrNull?.id ?? '';
+    
+    // Use FutureProvider instead of FutureBuilder to cache and avoid rebuilds
+    final endTime = startTime.add(Duration(hours: _totalHours));
+    final programsAsync = ref.watch(programsInRangeProvider((
+      playlistId: playlistId,
+      start: startTime,
+      end: endTime,
+    )));
 
-    return FutureBuilder<Map<String, List<Program>>>(
-      future: _getProgramsForChannels(playlistId, channels, startTime),
-      builder: (context, snapshot) {
-        final programsByChannel = snapshot.data ?? {};
+    return programsAsync.when(
+      data: (programs) {
+        // Process programs in isolate for better performance
+        // Extract channel IDs for isolate processing
+        final channelIds = channels.map((c) => c.id).toList();
+        final channelTvgIds = channels.map((c) => c.tvgId ?? c.id).toList();
+        
+        return FutureBuilder<Map<String, List<Program>>>(
+          future: compute(_processProgramsForChannels, _ProgramsProcessParams(
+            programs: programs,
+            channelIds: channelIds,
+            channelTvgIds: channelTvgIds,
+            startTime: startTime,
+            endTime: endTime,
+          )),
+          builder: (context, snapshot) {
+            final programsByChannel = snapshot.data ?? {};
 
-        return Column(
-          children: [
-            // Time header
-            _buildTimeHeader(context, startTime),
-            // Main content
-            Expanded(
-              child: Row(
-                children: [
-                  // Channel column
-                  _buildChannelColumn(context, channels),
-                  // Program grid
-                  Expanded(
-                    child: _buildProgramGrid(
-                      context,
-                      channels,
-                      programsByChannel,
-                      startTime,
-                    ),
+            return Column(
+              children: [
+                // Time header
+                _buildTimeHeader(context, startTime),
+                // Main content
+                Expanded(
+                  child: Row(
+                    children: [
+                      // Channel column
+                      _buildChannelColumn(context, channels),
+                      // Program grid
+                      Expanded(
+                        child: _buildProgramGrid(
+                          context,
+                          channels,
+                          programsByChannel,
+                          startTime,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-          ],
+                ),
+              ],
+            );
+          },
         );
       },
+      loading: () => Column(
+        children: [
+          _buildTimeHeader(context, startTime),
+          Expanded(
+            child: Row(
+              children: [
+                _buildChannelColumn(context, channels),
+                const Expanded(
+                  child: Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      error: (error, _) => Column(
+        children: [
+          _buildTimeHeader(context, startTime),
+          Expanded(
+            child: Row(
+              children: [
+                _buildChannelColumn(context, channels),
+                Expanded(
+                  child: Center(
+                    child: Text('Error loading programs: $error'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
+  }
+  
+  /// Process programs for channels - moved to isolate for performance
+  /// This runs in a separate isolate to avoid blocking the UI thread
+  static Map<String, List<Program>> _processProgramsForChannels(_ProgramsProcessParams params) {
+    final map = <String, List<Program>>{};
+    
+    // Create sets for fast lookup
+    final channelIdSet = params.channelIds.toSet();
+    final channelTvgIdSet = params.channelTvgIds.toSet();
+    
+    // Filter and group programs by channel ID
+    for (final program in params.programs) {
+      // Only include programs that overlap with the time range
+      if (program.end.isAfter(params.startTime) && program.start.isBefore(params.endTime)) {
+        // Try to match by channelId (tvgId) or fallback to channel ID
+        String? matchedChannelId;
+        
+        // First try to match by tvgId
+        if (channelTvgIdSet.contains(program.channelId)) {
+          // Find the corresponding channel ID
+          final index = params.channelTvgIds.indexOf(program.channelId);
+          if (index >= 0 && index < params.channelIds.length) {
+            matchedChannelId = params.channelIds[index];
+          }
+        }
+        
+        // Fallback to direct channel ID match
+        if (matchedChannelId == null && channelIdSet.contains(program.channelId)) {
+          matchedChannelId = program.channelId;
+        }
+        
+        // Use first channel ID as fallback if no match found
+        matchedChannelId ??= params.channelIds.isNotEmpty ? params.channelIds.first : program.channelId;
+        
+        map.putIfAbsent(matchedChannelId, () => []).add(program);
+      }
+    }
+    
+    // Sort programs by start time for each channel (in isolate, doesn't block UI)
+    for (final key in map.keys) {
+      map[key]!.sort((a, b) => a.start.compareTo(b.start));
+    }
+    
+    return map;
   }
 
   Widget _buildTimeHeader(BuildContext context, DateTime startTime) {
@@ -602,13 +737,13 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
           itemCount: channels.length,
           // Add itemExtent for better ListView performance (fixed height rows)
           itemExtent: _rowHeight,
-          itemBuilder: (context, index) {
-            final channel = channels[index];
-            final programs = programsByChannel[channel.tvgId] ??
-                programsByChannel[channel.id] ??
-                [];
+        itemBuilder: (context, index) {
+          final channel = channels[index];
+          // Try tvgId first, then fallback to id for program matching
+          final programs = programsByChannel[channel.tvgId ?? channel.id] ?? [];
 
-            // Wrap each row in RepaintBoundary to isolate repaints
+            // Wrap each row in RepaintBoundary to isolate repaints and improve performance
+            // This prevents repainting other rows when scrolling
             return RepaintBoundary(
               child: Container(
                 height: _rowHeight,
@@ -637,10 +772,16 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     DateTime gridStart,
     DateTime gridEnd,
   ) {
-    final visiblePrograms = programs
-        .where((p) => p.end.isAfter(gridStart) && p.start.isBefore(gridEnd))
-        .toList()
-      ..sort((a, b) => a.start.compareTo(b.start));
+    // Programs should already be filtered and sorted from isolate processing
+    // But filter again for safety (this is fast since list is already sorted)
+    final visiblePrograms = <Program>[];
+    for (final program in programs) {
+      if (program.end.isAfter(gridStart) && program.start.isBefore(gridEnd)) {
+        visiblePrograms.add(program);
+      }
+      // Early exit if we've passed the grid end (programs are sorted)
+      if (program.start.isAfter(gridEnd)) break;
+    }
 
     if (visiblePrograms.isEmpty) {
       return Container(
@@ -737,30 +878,6 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
         time.month == now.month &&
         time.day == now.day &&
         time.hour == now.hour;
-  }
-
-  Future<Map<String, List<Program>>> _getProgramsForChannels(
-    String playlistId,
-    List<Channel> channels,
-    DateTime startTime,
-  ) async {
-    if (playlistId.isEmpty) return {};
-
-    final endTime = startTime.add(Duration(hours: _totalHours));
-    final repository = ref.read(epgRepositoryProvider);
-    final result =
-        await repository.getProgramsInRange(playlistId, startTime, endTime);
-
-    return result.fold(
-      (failure) => {},
-      (programs) {
-        final map = <String, List<Program>>{};
-        for (final program in programs) {
-          map.putIfAbsent(program.channelId, () => []).add(program);
-        }
-        return map;
-      },
-    );
   }
 
   void _showDatePicker(BuildContext context) async {

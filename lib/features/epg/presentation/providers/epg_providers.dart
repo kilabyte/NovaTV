@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../playlist/domain/entities/channel.dart';
 import '../../data/datasources/epg_local_data_source.dart';
 import '../../data/datasources/epg_remote_data_source.dart';
 import '../../data/repositories/epg_repository_impl.dart';
@@ -93,6 +94,54 @@ final programsInRangeProvider = FutureProvider.family<List<Program>, ({String pl
     );
   },
 );
+
+/// Provider for programs grouped by channel ID (optimized for TV Guide)
+/// This caches the processed data to avoid reprocessing on every rebuild
+final programsByChannelProvider = Provider.family<Map<String, List<Program>>, ({
+  List<Program> programs,
+  List<Channel> channels,
+  DateTime startTime,
+  DateTime endTime,
+})>((ref, params) {
+  final map = <String, List<Program>>{};
+  
+  // Create a mapping from epgId (tvgId or id) to channelId for fast lookup
+  final epgIdToChannelId = <String, String>{};
+  for (final channel in params.channels) {
+    final epgId = channel.epgId; // This is tvgId ?? id
+    epgIdToChannelId[epgId] = channel.id;
+    // Also map tvgId directly if it exists
+    if (channel.tvgId != null && channel.tvgId != epgId) {
+      epgIdToChannelId[channel.tvgId!] = channel.id;
+    }
+    // And map id directly
+    epgIdToChannelId[channel.id] = channel.id;
+  }
+  
+  // Pre-filter programs by time range for better performance
+  final filteredPrograms = params.programs.where((p) => 
+    p.end.isAfter(params.startTime) && p.start.isBefore(params.endTime)
+  ).toList();
+  
+  // Group programs by channel ID - single pass, O(n) complexity
+  for (final program in filteredPrograms) {
+    // program.channelId contains the tvgId from XMLTV (or sometimes the channel id)
+    // Match it using epgId mapping
+    final matchedChannelId = epgIdToChannelId[program.channelId];
+    
+    if (matchedChannelId != null) {
+      final list = map.putIfAbsent(matchedChannelId, () => <Program>[]);
+      list.add(program);
+    }
+  }
+  
+  // Sort programs by start time for each channel (only once, after grouping)
+  for (final key in map.keys) {
+    map[key]!.sort((a, b) => a.start.compareTo(b.start));
+  }
+  
+  return map;
+});
 
 /// Provider for checking if EPG data is valid
 final hasValidEpgDataProvider = FutureProvider.family<bool, String>(

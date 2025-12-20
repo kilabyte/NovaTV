@@ -17,18 +17,7 @@ class GlassContainer extends StatelessWidget {
   final double? width;
   final double? height;
 
-  const GlassContainer({
-    super.key,
-    required this.child,
-    this.blur = 20,
-    this.opacity = 0.1,
-    this.borderRadius,
-    this.border,
-    this.padding,
-    this.margin,
-    this.width,
-    this.height,
-  });
+  const GlassContainer({super.key, required this.child, this.blur = 20, this.opacity = 0.1, this.borderRadius, this.border, this.padding, this.margin, this.width, this.height});
 
   @override
   Widget build(BuildContext context) {
@@ -45,10 +34,7 @@ class GlassContainer extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: opacity),
               borderRadius: borderRadius ?? BorderRadius.circular(16),
-              border: border ?? Border.all(
-                color: AppColors.glassBorder,
-                width: 1,
-              ),
+              border: border ?? Border.all(color: AppColors.glassBorder, width: 1),
             ),
             child: child,
           ),
@@ -71,16 +57,7 @@ class GlowContainer extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final EdgeInsetsGeometry? margin;
 
-  const GlowContainer({
-    super.key,
-    required this.child,
-    this.glowColor = AppColors.primary,
-    this.blurRadius = 20,
-    this.spreadRadius = 0,
-    this.borderRadius,
-    this.padding,
-    this.margin,
-  });
+  const GlowContainer({super.key, required this.child, this.glowColor = AppColors.primary, this.blurRadius = 20, this.spreadRadius = 0, this.borderRadius, this.padding, this.margin});
 
   @override
   Widget build(BuildContext context) {
@@ -89,13 +66,7 @@ class GlowContainer extends StatelessWidget {
       padding: padding,
       decoration: BoxDecoration(
         borderRadius: borderRadius ?? BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: glowColor.withValues(alpha: 0.3),
-            blurRadius: blurRadius,
-            spreadRadius: spreadRadius,
-          ),
-        ],
+        boxShadow: [BoxShadow(color: glowColor.withValues(alpha: 0.3), blurRadius: blurRadius, spreadRadius: spreadRadius)],
       ),
       child: child,
     );
@@ -115,16 +86,7 @@ class GradientBorderContainer extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final EdgeInsetsGeometry? margin;
 
-  const GradientBorderContainer({
-    super.key,
-    required this.child,
-    this.gradientColors = AppColors.gradientPrimary,
-    this.borderWidth = 2,
-    this.borderRadius,
-    this.backgroundColor,
-    this.padding,
-    this.margin,
-  });
+  const GradientBorderContainer({super.key, required this.child, this.gradientColors = AppColors.gradientPrimary, this.borderWidth = 2, this.borderRadius, this.backgroundColor, this.padding, this.margin});
 
   @override
   Widget build(BuildContext context) {
@@ -134,21 +96,12 @@ class GradientBorderContainer extends StatelessWidget {
       margin: margin,
       decoration: BoxDecoration(
         borderRadius: radius,
-        gradient: LinearGradient(
-          colors: gradientColors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: LinearGradient(colors: gradientColors, begin: Alignment.topLeft, end: Alignment.bottomRight),
       ),
       child: Container(
         margin: EdgeInsets.all(borderWidth),
         padding: padding,
-        decoration: BoxDecoration(
-          color: backgroundColor ?? AppColors.darkSurfaceVariant,
-          borderRadius: BorderRadius.circular(
-            (radius.topLeft.x - borderWidth).clamp(0, double.infinity),
-          ),
-        ),
+        decoration: BoxDecoration(color: backgroundColor ?? AppColors.darkSurfaceVariant, borderRadius: BorderRadius.circular((radius.topLeft.x - borderWidth).clamp(0, double.infinity))),
         child: child,
       ),
     );
@@ -164,32 +117,21 @@ class ShimmerWidget extends StatefulWidget {
   final double height;
   final BorderRadius? borderRadius;
 
-  const ShimmerWidget({
-    super.key,
-    required this.width,
-    required this.height,
-    this.borderRadius,
-  });
+  const ShimmerWidget({super.key, required this.width, required this.height, this.borderRadius});
 
   @override
   State<ShimmerWidget> createState() => _ShimmerWidgetState();
 }
 
-class _ShimmerWidgetState extends State<ShimmerWidget>
-    with SingleTickerProviderStateMixin {
+class _ShimmerWidgetState extends State<ShimmerWidget> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat();
-    _animation = Tween<double>(begin: -2, end: 2).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..repeat();
+    _animation = Tween<double>(begin: -2, end: 2).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -208,15 +150,7 @@ class _ShimmerWidgetState extends State<ShimmerWidget>
           height: widget.height,
           decoration: BoxDecoration(
             borderRadius: widget.borderRadius ?? BorderRadius.circular(8),
-            gradient: LinearGradient(
-              begin: Alignment(_animation.value - 1, 0),
-              end: Alignment(_animation.value + 1, 0),
-              colors: const [
-                AppColors.shimmerBase,
-                AppColors.shimmerHighlight,
-                AppColors.shimmerBase,
-              ],
-            ),
+            gradient: LinearGradient(begin: Alignment(_animation.value - 1, 0), end: Alignment(_animation.value + 1, 0), colors: const [AppColors.shimmerBase, AppColors.shimmerHighlight, AppColors.shimmerBase]),
           ),
         );
       },
@@ -237,23 +171,13 @@ class PremiumChannelCard extends StatefulWidget {
   final VoidCallback? onTap;
   final VoidCallback? onFavoriteTap;
 
-  const PremiumChannelCard({
-    super.key,
-    required this.name,
-    this.logoUrl,
-    this.currentProgram,
-    this.isLive = false,
-    this.isFavorite = false,
-    this.onTap,
-    this.onFavoriteTap,
-  });
+  const PremiumChannelCard({super.key, required this.name, this.logoUrl, this.currentProgram, this.isLive = false, this.isFavorite = false, this.onTap, this.onFavoriteTap});
 
   @override
   State<PremiumChannelCard> createState() => _PremiumChannelCardState();
 }
 
-class _PremiumChannelCardState extends State<PremiumChannelCard>
-    with SingleTickerProviderStateMixin {
+class _PremiumChannelCardState extends State<PremiumChannelCard> with SingleTickerProviderStateMixin {
   bool _isHovered = false;
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
@@ -261,13 +185,8 @@ class _PremiumChannelCardState extends State<PremiumChannelCard>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
   }
 
   @override
@@ -290,10 +209,7 @@ class _PremiumChannelCardState extends State<PremiumChannelCard>
       child: AnimatedBuilder(
         animation: _scaleAnimation,
         builder: (context, child) {
-          return Transform.scale(
-            scale: _scaleAnimation.value,
-            child: child,
-          );
+          return Transform.scale(scale: _scaleAnimation.value, child: child);
         },
         child: GestureDetector(
           onTap: widget.onTap,
@@ -302,21 +218,8 @@ class _PremiumChannelCardState extends State<PremiumChannelCard>
             decoration: BoxDecoration(
               color: AppColors.darkSurfaceVariant,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: _isHovered
-                    ? AppColors.primary.withValues(alpha: 0.5)
-                    : AppColors.darkBorder,
-                width: _isHovered ? 2 : 1,
-              ),
-              boxShadow: _isHovered
-                  ? [
-                      BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.2),
-                        blurRadius: 20,
-                        spreadRadius: 0,
-                      ),
-                    ]
-                  : null,
+              border: Border.all(color: _isHovered ? AppColors.primary.withValues(alpha: 0.5) : AppColors.darkBorder, width: _isHovered ? 2 : 1),
+              boxShadow: _isHovered ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.2), blurRadius: 20, spreadRadius: 0)] : null,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -331,18 +234,17 @@ class _PremiumChannelCardState extends State<PremiumChannelCard>
                         width: double.infinity,
                         decoration: BoxDecoration(
                           color: AppColors.darkSurface,
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(15),
-                          ),
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
                         ),
                         child: widget.logoUrl != null
                             ? ClipRRect(
-                                borderRadius: const BorderRadius.vertical(
-                                  top: Radius.circular(15),
-                                ),
+                                borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
                                 child: Image.network(
                                   widget.logoUrl!,
                                   fit: BoxFit.contain,
+                                  // Add caching for better performance
+                                  cacheWidth: 200, // Limit image size for memory efficiency
+                                  cacheHeight: 200,
                                   errorBuilder: (_, __, ___) => _buildPlaceholder(),
                                 ),
                               )
@@ -354,31 +256,16 @@ class _PremiumChannelCardState extends State<PremiumChannelCard>
                           top: 8,
                           left: 8,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.live,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(color: AppColors.live, borderRadius: BorderRadius.circular(4)),
                             child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(
-                                  Icons.circle,
-                                  size: 6,
-                                  color: Colors.white,
-                                ),
+                                Icon(Icons.circle, size: 6, color: Colors.white),
                                 SizedBox(width: 4),
                                 Text(
                                   'LIVE',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.5,
-                                  ),
+                                  style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.5),
                                 ),
                               ],
                             ),
@@ -393,21 +280,8 @@ class _PremiumChannelCardState extends State<PremiumChannelCard>
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
                             padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: widget.isFavorite
-                                  ? AppColors.secondary
-                                  : AppColors.darkSurface.withValues(alpha: 0.8),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              widget.isFavorite
-                                  ? Icons.favorite
-                                  : Icons.favorite_border,
-                              size: 16,
-                              color: widget.isFavorite
-                                  ? Colors.black
-                                  : Colors.white,
-                            ),
+                            decoration: BoxDecoration(color: widget.isFavorite ? AppColors.secondary : AppColors.darkSurface.withValues(alpha: 0.8), shape: BoxShape.circle),
+                            child: Icon(widget.isFavorite ? Icons.favorite : Icons.favorite_border, size: 16, color: widget.isFavorite ? Colors.black : Colors.white),
                           ),
                         ),
                       ),
@@ -425,11 +299,7 @@ class _PremiumChannelCardState extends State<PremiumChannelCard>
                       children: [
                         Text(
                           widget.name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                            color: AppColors.darkOnSurface,
-                          ),
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.darkOnSurface),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -437,10 +307,7 @@ class _PremiumChannelCardState extends State<PremiumChannelCard>
                           const SizedBox(height: 4),
                           Text(
                             widget.currentProgram!,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.primary,
-                            ),
+                            style: TextStyle(fontSize: 12, color: AppColors.primary),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -458,13 +325,7 @@ class _PremiumChannelCardState extends State<PremiumChannelCard>
   }
 
   Widget _buildPlaceholder() {
-    return Center(
-      child: Icon(
-        Icons.tv,
-        size: 40,
-        color: AppColors.darkOnSurfaceMuted,
-      ),
-    );
+    return Center(child: Icon(Icons.tv, size: 40, color: AppColors.darkOnSurfaceMuted));
   }
 }
 
@@ -481,21 +342,15 @@ class LiveBadge extends StatefulWidget {
   State<LiveBadge> createState() => _LiveBadgeState();
 }
 
-class _LiveBadgeState extends State<LiveBadge>
-    with SingleTickerProviderStateMixin {
+class _LiveBadgeState extends State<LiveBadge> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    )..repeat(reverse: true);
-    _animation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000))..repeat(reverse: true);
+    _animation = Tween<double>(begin: 0.5, end: 1.0).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -508,10 +363,7 @@ class _LiveBadgeState extends State<LiveBadge>
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.live,
-        borderRadius: BorderRadius.circular(4),
-      ),
+      decoration: BoxDecoration(color: AppColors.live, borderRadius: BorderRadius.circular(4)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -531,12 +383,7 @@ class _LiveBadgeState extends State<LiveBadge>
           const SizedBox(width: 4),
           const Text(
             'LIVE',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-            ),
+            style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.5),
           ),
         ],
       ),
@@ -554,28 +401,14 @@ class GradientText extends StatelessWidget {
   final List<Color> colors;
   final TextAlign? textAlign;
 
-  const GradientText({
-    super.key,
-    required this.text,
-    this.style,
-    this.colors = AppColors.gradientPrimary,
-    this.textAlign,
-  });
+  const GradientText({super.key, required this.text, this.style, this.colors = AppColors.gradientPrimary, this.textAlign});
 
   @override
   Widget build(BuildContext context) {
     return ShaderMask(
       blendMode: BlendMode.srcIn,
-      shaderCallback: (bounds) => LinearGradient(
-        colors: colors,
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ).createShader(bounds),
-      child: Text(
-        text,
-        style: style,
-        textAlign: textAlign,
-      ),
+      shaderCallback: (bounds) => LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight).createShader(bounds),
+      child: Text(text, style: style, textAlign: textAlign),
     );
   }
 }
@@ -590,13 +423,7 @@ class SectionHeader extends StatelessWidget {
   final VoidCallback? onActionTap;
   final Widget? trailing;
 
-  const SectionHeader({
-    super.key,
-    required this.title,
-    this.actionText,
-    this.onActionTap,
-    this.trailing,
-  });
+  const SectionHeader({super.key, required this.title, this.actionText, this.onActionTap, this.trailing});
 
   @override
   Widget build(BuildContext context) {
@@ -605,32 +432,17 @@ class SectionHeader extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            title,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.5,
-                ),
-          ),
+          Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.5)),
           if (trailing != null)
             trailing!
           else if (actionText != null)
             TextButton(
               onPressed: onActionTap,
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.primary,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
+              style: TextButton.styleFrom(foregroundColor: AppColors.primary, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    actionText!,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
+                  Text(actionText!, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                   const SizedBox(width: 4),
                   const Icon(Icons.arrow_forward_ios, size: 14),
                 ],

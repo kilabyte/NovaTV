@@ -35,24 +35,13 @@ class FavoritesScreen extends ConsumerWidget {
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.favorite.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.star_rounded,
-                      color: AppColors.favorite,
-                      size: 20,
-                    ),
+                    decoration: BoxDecoration(color: AppColors.favorite.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
+                    child: Icon(Icons.star_rounded, color: AppColors.favorite, size: 20),
                   ),
                   const SizedBox(width: 12),
                   const Text(
                     'Favorites',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
@@ -63,41 +52,24 @@ class FavoritesScreen extends ConsumerWidget {
           favoritesAsync.when(
             data: (channels) {
               if (channels.isEmpty) {
-                return SliverFillRemaining(
-                  child: _EmptyState(
-                    onBrowseChannels: () => context.go(Routes.channels),
-                  ),
-                );
+                return SliverFillRemaining(child: _EmptyState(onBrowseChannels: () => context.go(Routes.channels)));
               }
               return SliverPadding(
                 padding: const EdgeInsets.all(16),
                 sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final channel = channels[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: _FavoriteChannelTile(
-                          channel: channel,
-                          onTap: () => _playChannel(context, channel),
-                          onRemove: () => _toggleFavorite(ref, channel.id),
-                          onLongPress: () => _showChannelOptions(context, ref, channel),
-                        ),
-                      );
-                    },
-                    childCount: channels.length,
-                  ),
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final channel = channels[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _FavoriteChannelTile(channel: channel, onTap: () => _playChannel(context, channel), onRemove: () => _toggleFavorite(ref, channel.id), onLongPress: () => _showChannelOptions(context, ref, channel)),
+                    );
+                  }, childCount: channels.length),
                 ),
               );
             },
-            loading: () => const SliverFillRemaining(
-              child: _LoadingState(),
-            ),
+            loading: () => const SliverFillRemaining(child: _LoadingState()),
             error: (error, _) => SliverFillRemaining(
-              child: _ErrorState(
-                error: error.toString(),
-                onRetry: () => ref.invalidate(favoriteChannelsProvider),
-              ),
+              child: _ErrorState(error: error.toString(), onRetry: () => ref.invalidate(favoriteChannelsProvider)),
             ),
           ),
         ],
@@ -120,9 +92,7 @@ class FavoritesScreen extends ConsumerWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -132,10 +102,7 @@ class FavoritesScreen extends ConsumerWidget {
               margin: const EdgeInsets.only(top: 12),
               width: 40,
               height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.border,
-                borderRadius: BorderRadius.circular(2),
-              ),
+              decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
             ),
             // Channel info header
             Padding(
@@ -150,22 +117,9 @@ class FavoritesScreen extends ConsumerWidget {
                       children: [
                         Text(
                           channel.name,
-                          style: const TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w600),
                         ),
-                        if (channel.group != null) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            channel.group!,
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
+                        if (channel.group != null) ...[const SizedBox(height: 4), Text(channel.group!, style: TextStyle(color: AppColors.textSecondary, fontSize: 13))],
                       ],
                     ),
                   ),
@@ -206,12 +160,7 @@ class _FavoriteChannelTile extends ConsumerStatefulWidget {
   final VoidCallback onRemove;
   final VoidCallback onLongPress;
 
-  const _FavoriteChannelTile({
-    required this.channel,
-    required this.onTap,
-    required this.onRemove,
-    required this.onLongPress,
-  });
+  const _FavoriteChannelTile({required this.channel, required this.onTap, required this.onRemove, required this.onLongPress});
 
   @override
   ConsumerState<_FavoriteChannelTile> createState() => _FavoriteChannelTileState();
@@ -223,10 +172,7 @@ class _FavoriteChannelTileState extends ConsumerState<_FavoriteChannelTile> {
   @override
   Widget build(BuildContext context) {
     // Get current program if available
-    final currentProgram = ref.watch(currentProgramProvider((
-      playlistId: widget.channel.playlistId,
-      channelId: widget.channel.epgId,
-    )));
+    final currentProgram = ref.watch(currentProgramProvider((playlistId: widget.channel.playlistId, channelId: widget.channel.epgId)));
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -240,9 +186,7 @@ class _FavoriteChannelTileState extends ConsumerState<_FavoriteChannelTile> {
           decoration: BoxDecoration(
             color: _isHovered ? AppColors.surfaceHover : AppColors.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _isHovered ? AppColors.primary.withValues(alpha: 0.5) : AppColors.border,
-            ),
+            border: Border.all(color: _isHovered ? AppColors.primary.withValues(alpha: 0.5) : AppColors.border),
           ),
           child: Row(
             children: [
@@ -256,11 +200,7 @@ class _FavoriteChannelTileState extends ConsumerState<_FavoriteChannelTile> {
                   children: [
                     Text(
                       widget.channel.name,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w600),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -269,20 +209,14 @@ class _FavoriteChannelTileState extends ConsumerState<_FavoriteChannelTile> {
                     if (currentProgram.valueOrNull != null)
                       Text(
                         currentProgram.value!.title,
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 13,
-                        ),
+                        style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       )
                     else if (widget.channel.group != null)
                       Text(
                         widget.channel.group!,
-                        style: TextStyle(
-                          color: AppColors.textMuted,
-                          fontSize: 13,
-                        ),
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 13),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -294,21 +228,10 @@ class _FavoriteChannelTileState extends ConsumerState<_FavoriteChannelTile> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Play button
-                  _IconButton(
-                    icon: Icons.play_arrow_rounded,
-                    onTap: widget.onTap,
-                    color: AppColors.primary,
-                    isHovered: _isHovered,
-                  ),
+                  _IconButton(icon: Icons.play_arrow_rounded, onTap: widget.onTap, color: AppColors.primary, isHovered: _isHovered),
                   const SizedBox(width: 8),
                   // Remove button
-                  _IconButton(
-                    icon: Icons.star_rounded,
-                    onTap: widget.onRemove,
-                    color: AppColors.favorite,
-                    isActive: true,
-                    isHovered: _isHovered,
-                  ),
+                  _IconButton(icon: Icons.star_rounded, onTap: widget.onRemove, color: AppColors.favorite, isActive: true, isHovered: _isHovered),
                 ],
               ),
             ],
@@ -324,10 +247,7 @@ class _ChannelLogo extends StatelessWidget {
   final String? logoUrl;
   final double size;
 
-  const _ChannelLogo({
-    this.logoUrl,
-    this.size = 48,
-  });
+  const _ChannelLogo({this.logoUrl, this.size = 48});
 
   @override
   Widget build(BuildContext context) {
@@ -345,6 +265,9 @@ class _ChannelLogo extends StatelessWidget {
             ? CachedNetworkImage(
                 imageUrl: logoUrl!,
                 fit: BoxFit.cover,
+                // Add memory limits for better performance on Android
+                memCacheWidth: 48,
+                memCacheHeight: 48,
                 placeholder: (context, url) => _buildPlaceholder(),
                 errorWidget: (context, url, error) => _buildPlaceholder(),
               )
@@ -356,11 +279,7 @@ class _ChannelLogo extends StatelessWidget {
   Widget _buildPlaceholder() {
     return Container(
       color: AppColors.surfaceElevated,
-      child: Icon(
-        Icons.tv_rounded,
-        color: AppColors.textMuted,
-        size: size * 0.5,
-      ),
+      child: Icon(Icons.tv_rounded, color: AppColors.textMuted, size: size * 0.5),
     );
   }
 }
@@ -373,13 +292,7 @@ class _IconButton extends StatefulWidget {
   final bool isActive;
   final bool isHovered;
 
-  const _IconButton({
-    required this.icon,
-    required this.onTap,
-    required this.color,
-    this.isActive = false,
-    this.isHovered = false,
-  });
+  const _IconButton({required this.icon, required this.onTap, required this.color, this.isActive = false, this.isHovered = false});
 
   @override
   State<_IconButton> createState() => _IconButtonState();
@@ -402,21 +315,11 @@ class _IconButtonState extends State<_IconButton> {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: widget.isActive || _isButtonHovered
-                ? widget.color.withValues(alpha: 0.2)
-                : AppColors.surfaceElevated,
+            color: widget.isActive || _isButtonHovered ? widget.color.withValues(alpha: 0.2) : AppColors.surfaceElevated,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: widget.isActive || _isButtonHovered
-                  ? widget.color.withValues(alpha: 0.5)
-                  : AppColors.border,
-            ),
+            border: Border.all(color: widget.isActive || _isButtonHovered ? widget.color.withValues(alpha: 0.5) : AppColors.border),
           ),
-          child: Icon(
-            widget.icon,
-            color: widget.isActive ? widget.color : AppColors.textSecondary,
-            size: 20,
-          ),
+          child: Icon(widget.icon, color: widget.isActive ? widget.color : AppColors.textSecondary, size: 20),
         ),
       ),
     );
@@ -449,33 +352,19 @@ class _EmptyState extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppColors.favorite.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: AppColors.favorite.withValues(alpha: 0.3),
-                ),
+                border: Border.all(color: AppColors.favorite.withValues(alpha: 0.3)),
               ),
-              child: Icon(
-                Icons.star_outline_rounded,
-                size: 48,
-                color: AppColors.favorite.withValues(alpha: 0.7),
-              ),
+              child: Icon(Icons.star_outline_rounded, size: 48, color: AppColors.favorite.withValues(alpha: 0.7)),
             ),
             const SizedBox(height: 24),
             const Text(
               'No favorites yet',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
             Text(
               'Tap the star icon on any channel\nto add it to your favorites',
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 14,
-                height: 1.5,
-              ),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 14, height: 1.5),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 28),
@@ -487,9 +376,7 @@ class _EmptyState extends StatelessWidget {
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.black,
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ],
@@ -509,22 +396,9 @@ class _LoadingState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          SizedBox(
-            width: 32,
-            height: 32,
-            child: CircularProgressIndicator(
-              strokeWidth: 3,
-              color: AppColors.primary,
-            ),
-          ),
+          SizedBox(width: 32, height: 32, child: CircularProgressIndicator(strokeWidth: 3, color: AppColors.primary)),
           const SizedBox(height: 16),
-          Text(
-            'Loading favorites...',
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 14,
-            ),
-          ),
+          Text('Loading favorites...', style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
         ],
       ),
     );
@@ -536,10 +410,7 @@ class _ErrorState extends StatelessWidget {
   final String error;
   final VoidCallback onRetry;
 
-  const _ErrorState({
-    required this.error,
-    required this.onRetry,
-  });
+  const _ErrorState({required this.error, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -560,32 +431,19 @@ class _ErrorState extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppColors.error.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: AppColors.error.withValues(alpha: 0.3),
-                ),
+                border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
               ),
-              child: Icon(
-                Icons.error_outline_rounded,
-                size: 40,
-                color: AppColors.error,
-              ),
+              child: Icon(Icons.error_outline_rounded, size: 40, color: AppColors.error),
             ),
             const SizedBox(height: 20),
             const Text(
               'Error loading favorites',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             Text(
               error,
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 13,
-              ),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -593,10 +451,7 @@ class _ErrorState extends StatelessWidget {
               onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded, size: 18),
               label: const Text('Retry'),
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.textPrimary,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              ),
+              style: TextButton.styleFrom(foregroundColor: AppColors.textPrimary, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
             ),
           ],
         ),
@@ -612,12 +467,7 @@ class _OptionTile extends StatefulWidget {
   final Color iconColor;
   final VoidCallback onTap;
 
-  const _OptionTile({
-    required this.icon,
-    required this.title,
-    required this.iconColor,
-    required this.onTap,
-  });
+  const _OptionTile({required this.icon, required this.title, required this.iconColor, required this.onTap});
 
   @override
   State<_OptionTile> createState() => _OptionTileState();
@@ -641,38 +491,21 @@ class _OptionTileState extends State<_OptionTile> {
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
-            color: _isHovered
-                ? widget.iconColor.withValues(alpha: 0.1)
-                : AppColors.surfaceElevated,
+            color: _isHovered ? widget.iconColor.withValues(alpha: 0.1) : AppColors.surfaceElevated,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _isHovered
-                  ? widget.iconColor.withValues(alpha: 0.4)
-                  : AppColors.border,
-            ),
+            border: Border.all(color: _isHovered ? widget.iconColor.withValues(alpha: 0.4) : AppColors.border),
           ),
           child: Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: widget.iconColor.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  widget.icon,
-                  color: widget.iconColor,
-                  size: 20,
-                ),
+                decoration: BoxDecoration(color: widget.iconColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
+                child: Icon(widget.icon, color: widget.iconColor, size: 20),
               ),
               const SizedBox(width: 14),
               Text(
                 widget.title,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
               ),
             ],
           ),

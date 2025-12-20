@@ -39,8 +39,8 @@ class WindowService with WindowListener {
       // Initialize window_manager
       await windowManager.ensureInitialized();
 
-      // Open settings box
-      _settingsBox = await Hive.openBox(StorageKeys.settingsBox);
+      // Open settings box with retry logic for lock errors
+      _settingsBox = await _safeOpenSettingsBox();
 
       // Restore window settings
       await _restoreWindowSettings();
@@ -65,6 +65,31 @@ class WindowService with WindowListener {
 
   bool get _isDesktop {
     return !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
+  }
+
+  /// Safely open the settings box with retry logic for lock errors
+  Future<Box> _safeOpenSettingsBox() async {
+    const maxRetries = 3;
+    for (var attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (Hive.isBoxOpen(StorageKeys.settingsBox)) {
+          return Hive.box(StorageKeys.settingsBox);
+        }
+        return await Hive.openBox(StorageKeys.settingsBox);
+      } catch (e) {
+        if (attempt < maxRetries - 1) {
+          await Future.delayed(Duration(milliseconds: 100 * (attempt + 1)));
+          if (Hive.isBoxOpen(StorageKeys.settingsBox)) {
+            try {
+              await Hive.box(StorageKeys.settingsBox).close();
+            } catch (_) {}
+          }
+        } else {
+          rethrow;
+        }
+      }
+    }
+    throw Exception('Failed to open settings box');
   }
 
   /// Restore window position and size from storage

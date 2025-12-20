@@ -9,6 +9,7 @@ import '../../../../config/theme/app_colors.dart';
 import '../../../epg/presentation/providers/epg_providers.dart';
 import '../../../playlist/presentation/providers/playlist_providers.dart';
 import '../providers/settings_providers.dart';
+import 'index_stats_screen.dart';
 
 /// Clean settings screen with solid dark design
 class SettingsScreen extends ConsumerWidget {
@@ -33,11 +34,7 @@ class SettingsScreen extends ConsumerWidget {
               ),
               child: const Text(
                 'Settings',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.w600),
               ),
             ),
           ),
@@ -51,20 +48,8 @@ class SettingsScreen extends ConsumerWidget {
                 _SettingsSection(
                   title: 'Appearance',
                   children: [
-                    _SettingsTile(
-                      icon: Icons.palette_rounded,
-                      title: 'Theme',
-                      subtitle: _formatThemeMode(settings.themeMode),
-                      onTap: () => _showThemeModePicker(context, ref),
-                      showChevron: true,
-                    ),
-                    _SettingsTile(
-                      icon: Icons.favorite_rounded,
-                      title: 'Support the Developer',
-                      subtitle: 'Help keep the app updated',
-                      onTap: () => _handleSupportDeveloper(context),
-                      iconColor: AppColors.error,
-                    ),
+                    _SettingsTile(icon: Icons.palette_rounded, title: 'Theme', subtitle: _formatThemeMode(settings.themeMode), onTap: () => _showThemeModePicker(context, ref), showChevron: true),
+                    _SettingsTile(icon: Icons.favorite_rounded, title: 'Support the Developer', subtitle: 'Help keep the app updated', onTap: () => _handleSupportDeveloper(context), iconColor: AppColors.error),
                   ],
                 ),
 
@@ -74,13 +59,7 @@ class SettingsScreen extends ConsumerWidget {
                 _SettingsSection(
                   title: 'Playlists',
                   children: [
-                    _SettingsTile(
-                      icon: Icons.playlist_add_rounded,
-                      title: 'Manage Playlists',
-                      subtitle: 'Add, edit, or remove playlists',
-                      onTap: () => context.push(Routes.playlists),
-                      showChevron: true,
-                    ),
+                    _SettingsTile(icon: Icons.playlist_add_rounded, title: 'Manage Playlists', subtitle: 'Add, edit, or remove playlists', onTap: () => context.push(Routes.playlists), showChevron: true),
                     _ToggleTile(
                       icon: Icons.refresh_rounded,
                       title: 'Auto-refresh playlists',
@@ -90,14 +69,7 @@ class SettingsScreen extends ConsumerWidget {
                         ref.read(appSettingsProvider.notifier).setAutoRefreshPlaylists(value);
                       },
                     ),
-                    if (settings.autoRefreshPlaylists)
-                      _SettingsTile(
-                        icon: Icons.timelapse_rounded,
-                        title: 'Refresh interval',
-                        subtitle: 'Every ${settings.playlistRefreshInterval} hours',
-                        onTap: () => _showRefreshIntervalPicker(context, ref, isPlaylist: true),
-                        showChevron: true,
-                      ),
+                    if (settings.autoRefreshPlaylists) _SettingsTile(icon: Icons.timelapse_rounded, title: 'Refresh interval', subtitle: 'Every ${settings.playlistRefreshInterval} hours', onTap: () => _showRefreshIntervalPicker(context, ref, isPlaylist: true), showChevron: true),
                   ],
                 ),
 
@@ -107,12 +79,7 @@ class SettingsScreen extends ConsumerWidget {
                 _SettingsSection(
                   title: 'TV Guide (EPG)',
                   children: [
-                    _SettingsTile(
-                      icon: Icons.cloud_download_rounded,
-                      title: 'Refresh EPG now',
-                      subtitle: 'Download latest program data',
-                      onTap: () => _refreshEpg(context, ref),
-                    ),
+                    _SettingsTile(icon: Icons.cloud_download_rounded, title: 'Refresh EPG now', subtitle: 'Download latest program data', onTap: () => _refreshEpg(context, ref)),
                     _ToggleTile(
                       icon: Icons.auto_awesome_rounded,
                       title: 'Auto-refresh EPG',
@@ -122,21 +89,8 @@ class SettingsScreen extends ConsumerWidget {
                         ref.read(appSettingsProvider.notifier).setAutoRefreshEpg(value);
                       },
                     ),
-                    if (settings.autoRefreshEpg)
-                      _SettingsTile(
-                        icon: Icons.timelapse_rounded,
-                        title: 'EPG refresh interval',
-                        subtitle: 'Every ${settings.epgRefreshInterval} hours',
-                        onTap: () => _showRefreshIntervalPicker(context, ref, isPlaylist: false),
-                        showChevron: true,
-                      ),
-                    _SettingsTile(
-                      icon: Icons.access_time_rounded,
-                      title: 'Timezone offset',
-                      subtitle: _formatTimezoneOffset(settings.epgTimezoneOffset),
-                      onTap: () => _showTimezoneOffsetPicker(context, ref),
-                      showChevron: true,
-                    ),
+                    if (settings.autoRefreshEpg) _SettingsTile(icon: Icons.timelapse_rounded, title: 'EPG refresh interval', subtitle: 'Every ${settings.epgRefreshInterval} hours', onTap: () => _showRefreshIntervalPicker(context, ref, isPlaylist: false), showChevron: true),
+                    _SettingsTile(icon: Icons.access_time_rounded, title: 'Timezone offset', subtitle: _formatTimezoneOffset(settings.epgTimezoneOffset), onTap: () => _showTimezoneOffsetPicker(context, ref), showChevron: true),
                   ],
                 ),
 
@@ -155,13 +109,7 @@ class SettingsScreen extends ConsumerWidget {
                         ref.read(appSettingsProvider.notifier).setHardwareAcceleration(value);
                       },
                     ),
-                    _SettingsTile(
-                      icon: Icons.aspect_ratio_rounded,
-                      title: 'Default aspect ratio',
-                      subtitle: _formatAspectRatio(settings.defaultAspectRatio),
-                      onTap: () => _showAspectRatioPicker(context, ref),
-                      showChevron: true,
-                    ),
+                    _SettingsTile(icon: Icons.aspect_ratio_rounded, title: 'Default aspect ratio', subtitle: _formatAspectRatio(settings.defaultAspectRatio), onTap: () => _showAspectRatioPicker(context, ref), showChevron: true),
                     _ToggleTile(
                       icon: Icons.history_rounded,
                       title: 'Remember last channel',
@@ -198,37 +146,17 @@ class SettingsScreen extends ConsumerWidget {
                 _SettingsSection(
                   title: 'Data',
                   children: [
-                    _SettingsTile(
-                      icon: Icons.delete_outline_rounded,
-                      title: 'Clear image cache',
-                      subtitle: 'Remove cached channel logos',
-                      onTap: () => _clearImageCache(context),
-                    ),
-                    _SettingsTile(
-                      icon: Icons.cleaning_services_rounded,
-                      title: 'Clean up old EPG data',
-                      subtitle: 'Remove EPG data older than 7 days',
-                      onTap: () => _cleanupEpgData(context, ref),
-                    ),
-                    _SettingsTile(
-                      icon: Icons.restore_rounded,
-                      title: 'Reset all settings',
-                      subtitle: 'Restore default settings',
-                      onTap: () => _resetSettings(context, ref),
-                      isDanger: true,
-                    ),
+                    _SettingsTile(icon: Icons.analytics_rounded, title: 'Index Statistics', subtitle: 'View Hive index performance metrics', onTap: () => context.push('/settings/index-stats'), showChevron: true),
+                    _SettingsTile(icon: Icons.delete_outline_rounded, title: 'Clear image cache', subtitle: 'Remove cached channel logos', onTap: () => _clearImageCache(context)),
+                    _SettingsTile(icon: Icons.cleaning_services_rounded, title: 'Clean up old EPG data', subtitle: 'Remove EPG data older than 7 days', onTap: () => _cleanupEpgData(context, ref)),
+                    _SettingsTile(icon: Icons.restore_rounded, title: 'Reset all settings', subtitle: 'Restore default settings', onTap: () => _resetSettings(context, ref), isDanger: true),
                   ],
                 ),
 
                 const SizedBox(height: 16),
 
                 // About section
-                _SettingsSection(
-                  title: 'About',
-                  children: [
-                    _AboutTile(),
-                  ],
-                ),
+                _SettingsSection(title: 'About', children: [_AboutTile()]),
 
                 const SizedBox(height: 80),
               ]),
@@ -404,25 +332,16 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  void _showBottomSheet({
-    required BuildContext context,
-    required String title,
-    required List<Widget> children,
-    bool isScrollable = false,
-  }) {
+  void _showBottomSheet({required BuildContext context, required String title, required List<Widget> children, bool isScrollable = false}) {
     HapticFeedback.lightImpact();
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       isScrollControlled: isScrollable,
       builder: (context) => SafeArea(
         child: Container(
-          constraints: BoxConstraints(
-            maxHeight: isScrollable ? MediaQuery.of(context).size.height * 0.7 : double.infinity,
-          ),
+          constraints: BoxConstraints(maxHeight: isScrollable ? MediaQuery.of(context).size.height * 0.7 : double.infinity),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -431,21 +350,14 @@ class SettingsScreen extends ConsumerWidget {
                 width: 36,
                 height: 4,
                 margin: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
               ),
               // Title
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text(
                   title,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
                 ),
               ),
               // Content
@@ -453,19 +365,13 @@ class SettingsScreen extends ConsumerWidget {
                 Flexible(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: children,
-                    ),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: children),
                   ),
                 )
               else
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: children,
-                  ),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: children),
                 ),
             ],
           ),
@@ -480,10 +386,7 @@ class SettingsScreen extends ConsumerWidget {
     final playlist = playlists.valueOrNull?.firstOrNull;
 
     if (playlist?.epgUrl != null) {
-      ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(
-        playlist!.id,
-        playlist.epgUrl!,
-      );
+      ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist!.id, playlist.epgUrl!);
       _showSnackBar(context, 'Refreshing EPG data...', Icons.cloud_download_rounded);
     } else {
       _showSnackBar(context, 'No EPG URL configured in playlists', Icons.warning_rounded, isWarning: true);
@@ -513,23 +416,14 @@ class SettingsScreen extends ConsumerWidget {
       SnackBar(
         content: Row(
           children: [
-            Icon(
-              icon,
-              color: isWarning ? AppColors.warning : AppColors.primary,
-              size: 20,
-            ),
+            Icon(icon, color: isWarning ? AppColors.warning : AppColors.primary, size: 20),
             const SizedBox(width: 12),
-            Text(
-              message,
-              style: const TextStyle(color: AppColors.textPrimary),
-            ),
+            Text(message, style: const TextStyle(color: AppColors.textPrimary)),
           ],
         ),
         backgroundColor: AppColors.surfaceElevated,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }
@@ -540,37 +434,23 @@ class SettingsScreen extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
+              decoration: BoxDecoration(color: AppColors.error.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
               child: Icon(Icons.warning_rounded, color: AppColors.error, size: 20),
             ),
             const SizedBox(width: 12),
-            const Text(
-              'Reset Settings',
-              style: TextStyle(color: AppColors.textPrimary),
-            ),
+            const Text('Reset Settings', style: TextStyle(color: AppColors.textPrimary)),
           ],
         ),
-        content: const Text(
-          'Are you sure you want to reset all settings to defaults? This action cannot be undone.',
-          style: TextStyle(color: AppColors.textSecondary),
-        ),
+        content: const Text('Are you sure you want to reset all settings to defaults? This action cannot be undone.', style: TextStyle(color: AppColors.textSecondary)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
+            child: Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
           ),
           FilledButton(
             onPressed: () async {
@@ -582,9 +462,7 @@ class SettingsScreen extends ConsumerWidget {
             },
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.error,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             child: const Text('Reset'),
           ),
@@ -604,38 +482,25 @@ class SettingsScreen extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
+              decoration: BoxDecoration(color: AppColors.error.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
               child: Icon(Icons.favorite_rounded, color: AppColors.error, size: 20),
             ),
             const SizedBox(width: 12),
-            const Text(
-              'Support the Developer',
-              style: TextStyle(color: AppColors.textPrimary),
-            ),
+            const Text('Support the Developer', style: TextStyle(color: AppColors.textPrimary)),
           ],
         ),
-        content: const Text(
-          'Thank you for your interest in supporting development! This feature will be available soon.',
-          style: TextStyle(color: AppColors.textSecondary),
-        ),
+        content: const Text('Thank you for your interest in supporting development! This feature will be available soon.', style: TextStyle(color: AppColors.textSecondary)),
         actions: [
           FilledButton(
             onPressed: () => Navigator.pop(context),
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.primary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             child: const Text('OK'),
           ),
@@ -653,10 +518,7 @@ class _SettingsSection extends StatelessWidget {
   final String title;
   final List<Widget> children;
 
-  const _SettingsSection({
-    required this.title,
-    required this.children,
-  });
+  const _SettingsSection({required this.title, required this.children});
 
   @override
   Widget build(BuildContext context) {
@@ -667,12 +529,7 @@ class _SettingsSection extends StatelessWidget {
           padding: const EdgeInsets.only(left: 4, bottom: 8),
           child: Text(
             title.toUpperCase(),
-            style: const TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
-            ),
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
           ),
         ),
         Container(
@@ -681,9 +538,7 @@ class _SettingsSection extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: AppColors.border),
           ),
-          child: Column(
-            children: children,
-          ),
+          child: Column(children: children),
         ),
       ],
     );
@@ -699,15 +554,7 @@ class _SettingsTile extends StatefulWidget {
   final bool isDanger;
   final Color? iconColor;
 
-  const _SettingsTile({
-    required this.icon,
-    required this.title,
-    this.subtitle,
-    required this.onTap,
-    this.showChevron = false,
-    this.isDanger = false,
-    this.iconColor,
-  });
+  const _SettingsTile({required this.icon, required this.title, this.subtitle, required this.onTap, this.showChevron = false, this.isDanger = false, this.iconColor});
 
   @override
   State<_SettingsTile> createState() => _SettingsTileState();
@@ -729,19 +576,18 @@ class _SettingsTileState extends State<_SettingsTile> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 100),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: _isHovered ? AppColors.surfaceHover : Colors.transparent,
-          ),
+          decoration: BoxDecoration(color: _isHovered ? AppColors.surfaceHover : Colors.transparent),
           child: Row(
             children: [
               Icon(
                 widget.icon,
-                color: widget.iconColor ??
+                color:
+                    widget.iconColor ??
                     (widget.isDanger
                         ? AppColors.error
                         : _isHovered
-                            ? AppColors.primary
-                            : AppColors.textSecondary),
+                        ? AppColors.primary
+                        : AppColors.textSecondary),
                 size: 22,
               ),
               const SizedBox(width: 14),
@@ -751,33 +597,13 @@ class _SettingsTileState extends State<_SettingsTile> {
                   children: [
                     Text(
                       widget.title,
-                      style: TextStyle(
-                        color: widget.isDanger ? AppColors.error : AppColors.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: TextStyle(color: widget.isDanger ? AppColors.error : AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
                     ),
-                    if (widget.subtitle != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        widget.subtitle!,
-                        style: TextStyle(
-                          color: widget.isDanger
-                              ? AppColors.error.withValues(alpha: 0.7)
-                              : AppColors.textMuted,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
+                    if (widget.subtitle != null) ...[const SizedBox(height: 2), Text(widget.subtitle!, style: TextStyle(color: widget.isDanger ? AppColors.error.withValues(alpha: 0.7) : AppColors.textMuted, fontSize: 13))],
                   ],
                 ),
               ),
-              if (widget.showChevron)
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: AppColors.textMuted,
-                  size: 20,
-                ),
+              if (widget.showChevron) Icon(Icons.chevron_right_rounded, color: AppColors.textMuted, size: 20),
             ],
           ),
         ),
@@ -793,13 +619,7 @@ class _ToggleTile extends StatefulWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
 
-  const _ToggleTile({
-    required this.icon,
-    required this.title,
-    this.subtitle,
-    required this.value,
-    required this.onChanged,
-  });
+  const _ToggleTile({required this.icon, required this.title, this.subtitle, required this.value, required this.onChanged});
 
   @override
   State<_ToggleTile> createState() => _ToggleTileState();
@@ -821,16 +641,10 @@ class _ToggleTileState extends State<_ToggleTile> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 100),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: _isHovered ? AppColors.surfaceHover : Colors.transparent,
-          ),
+          decoration: BoxDecoration(color: _isHovered ? AppColors.surfaceHover : Colors.transparent),
           child: Row(
             children: [
-              Icon(
-                widget.icon,
-                color: _isHovered ? AppColors.primary : AppColors.textSecondary,
-                size: 22,
-              ),
+              Icon(widget.icon, color: _isHovered ? AppColors.primary : AppColors.textSecondary, size: 22),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -838,29 +652,13 @@ class _ToggleTileState extends State<_ToggleTile> {
                   children: [
                     Text(
                       widget.title,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
                     ),
-                    if (widget.subtitle != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        widget.subtitle!,
-                        style: TextStyle(
-                          color: AppColors.textMuted,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
+                    if (widget.subtitle != null) ...[const SizedBox(height: 2), Text(widget.subtitle!, style: TextStyle(color: AppColors.textMuted, fontSize: 13))],
                   ],
                 ),
               ),
-              _CleanSwitch(
-                value: widget.value,
-                onChanged: widget.onChanged,
-              ),
+              _CleanSwitch(value: widget.value, onChanged: widget.onChanged),
             ],
           ),
         ),
@@ -873,10 +671,7 @@ class _CleanSwitch extends StatelessWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
 
-  const _CleanSwitch({
-    required this.value,
-    required this.onChanged,
-  });
+  const _CleanSwitch({required this.value, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -894,9 +689,7 @@ class _CleanSwitch extends StatelessWidget {
         decoration: BoxDecoration(
           color: value ? AppColors.primary : AppColors.surfaceElevated,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: value ? AppColors.primary : AppColors.border,
-          ),
+          border: Border.all(color: value ? AppColors.primary : AppColors.border),
         ),
         child: AnimatedAlign(
           duration: const Duration(milliseconds: 200),
@@ -905,10 +698,7 @@ class _CleanSwitch extends StatelessWidget {
           child: Container(
             width: 22,
             height: 22,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle),
           ),
         ),
       ),
@@ -950,15 +740,8 @@ class _AboutTileState extends State<_AboutTile> {
           Container(
             width: 44,
             height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.live_tv_rounded,
-              color: Colors.white,
-              size: 22,
-            ),
+            decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(10)),
+            child: const Icon(Icons.live_tv_rounded, color: Colors.white, size: 22),
           ),
           const SizedBox(width: 14),
           Column(
@@ -966,36 +749,14 @@ class _AboutTileState extends State<_AboutTile> {
             children: [
               const Text(
                 'Nova IPTV',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 17, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 2),
-              Text(
-                'Version $_version',
-                style: TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 13,
-                ),
-              ),
+              Text('Version $_version', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
               const SizedBox(height: 2),
-              Text(
-                'Build $_buildNumber',
-                style: TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 12,
-                ),
-              ),
+              Text('Build $_buildNumber', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
               const SizedBox(height: 2),
-              Text(
-                '© Kilabyte IO',
-                style: TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 12,
-                ),
-              ),
+              Text('© Kilabyte IO', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
             ],
           ),
         ],
@@ -1010,12 +771,7 @@ class _OptionTile extends StatefulWidget {
   final String? subtitle;
   final VoidCallback onTap;
 
-  const _OptionTile({
-    required this.icon,
-    required this.title,
-    this.subtitle,
-    required this.onTap,
-  });
+  const _OptionTile({required this.icon, required this.title, this.subtitle, required this.onTap});
 
   @override
   State<_OptionTile> createState() => _OptionTileState();
@@ -1041,17 +797,11 @@ class _OptionTileState extends State<_OptionTile> {
           decoration: BoxDecoration(
             color: _isHovered ? AppColors.surfaceHover : AppColors.surfaceElevated,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: _isHovered ? AppColors.primary.withValues(alpha: 0.5) : AppColors.border,
-            ),
+            border: Border.all(color: _isHovered ? AppColors.primary.withValues(alpha: 0.5) : AppColors.border),
           ),
           child: Row(
             children: [
-              Icon(
-                widget.icon,
-                color: _isHovered ? AppColors.primary : AppColors.textSecondary,
-                size: 20,
-              ),
+              Icon(widget.icon, color: _isHovered ? AppColors.primary : AppColors.textSecondary, size: 20),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -1059,22 +809,9 @@ class _OptionTileState extends State<_OptionTile> {
                   children: [
                     Text(
                       widget.title,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
                     ),
-                    if (widget.subtitle != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        widget.subtitle!,
-                        style: TextStyle(
-                          color: AppColors.textMuted,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
+                    if (widget.subtitle != null) ...[const SizedBox(height: 2), Text(widget.subtitle!, style: TextStyle(color: AppColors.textMuted, fontSize: 13))],
                   ],
                 ),
               ),

@@ -11,6 +11,7 @@ import '../../features/playlist/presentation/screens/add_playlist_screen.dart';
 import '../../features/playlist/presentation/screens/playlist_manager_screen.dart';
 import '../../features/playlist/data/models/playlist_model.dart';
 import '../../features/search/presentation/screens/search_screen.dart';
+import '../../features/settings/presentation/screens/index_stats_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/settings/presentation/providers/settings_providers.dart';
 import '../../shared/animations/page_transitions.dart';
@@ -18,13 +19,7 @@ import '../../shared/widgets/app_shell.dart';
 import 'routes.dart';
 
 /// Valid sidebar routes that can be restored on app startup
-const _validSidebarRoutes = {
-  Routes.channels,
-  Routes.tvGuide,
-  Routes.favorites,
-  Routes.playlists,
-  Routes.settings,
-};
+const _validSidebarRoutes = {Routes.channels, Routes.tvGuide, Routes.favorites, Routes.playlists, Routes.settings};
 
 /// Check if user has any playlists (reads directly from Hive)
 bool _hasPlaylists() {
@@ -71,68 +66,50 @@ GoRouter _createRouter(String initialLocation) => GoRouter(
       builder: (context, state, child) => AppShell(child: child),
       routes: [
         // Redirect home to channels
-        GoRoute(
-          path: Routes.home,
-          name: 'home',
-          redirect: (context, state) => Routes.channels,
-        ),
+        GoRoute(path: Routes.home, name: 'home', redirect: (context, state) => Routes.channels),
         GoRoute(
           path: Routes.channels,
           name: 'channels',
-          pageBuilder: (context, state) => FadeThroughTransition(
-            key: state.pageKey,
-            child: const ChannelListScreen(),
-          ),
+          pageBuilder: (context, state) => FadeThroughTransition(key: state.pageKey, child: const ChannelListScreen()),
         ),
         GoRoute(
           path: Routes.tvGuide,
           name: 'tvGuide',
-          pageBuilder: (context, state) => FadeThroughTransition(
-            key: state.pageKey,
-            child: const TvGuideScreen(),
-          ),
+          pageBuilder: (context, state) => FadeThroughTransition(key: state.pageKey, child: const TvGuideScreen()),
         ),
         GoRoute(
           path: Routes.favorites,
           name: 'favorites',
-          pageBuilder: (context, state) => FadeThroughTransition(
-            key: state.pageKey,
-            child: const FavoritesScreen(),
-          ),
+          pageBuilder: (context, state) => FadeThroughTransition(key: state.pageKey, child: const FavoritesScreen()),
         ),
         GoRoute(
           path: Routes.playlists,
           name: 'playlists',
-          pageBuilder: (context, state) => FadeThroughTransition(
-            key: state.pageKey,
-            child: const PlaylistManagerScreen(),
-          ),
+          pageBuilder: (context, state) => FadeThroughTransition(key: state.pageKey, child: const PlaylistManagerScreen()),
           routes: [
             GoRoute(
               path: 'add',
               name: 'addPlaylist',
-              pageBuilder: (context, state) => ZoomFadeTransition(
-                key: state.pageKey,
-                child: const AddPlaylistScreen(),
-              ),
+              pageBuilder: (context, state) => ZoomFadeTransition(key: state.pageKey, child: const AddPlaylistScreen()),
             ),
           ],
         ),
         GoRoute(
           path: Routes.settings,
           name: 'settings',
-          pageBuilder: (context, state) => FadeThroughTransition(
-            key: state.pageKey,
-            child: const SettingsScreen(),
-          ),
+          pageBuilder: (context, state) => FadeThroughTransition(key: state.pageKey, child: const SettingsScreen()),
+          routes: [
+            GoRoute(
+              path: 'index-stats',
+              name: 'indexStats',
+              pageBuilder: (context, state) => FadeThroughTransition(key: state.pageKey, child: const IndexStatsScreen()),
+            ),
+          ],
         ),
         GoRoute(
           path: Routes.search,
           name: 'search',
-          pageBuilder: (context, state) => FadeScaleTransition(
-            key: state.pageKey,
-            child: const SearchScreen(),
-          ),
+          pageBuilder: (context, state) => FadeScaleTransition(key: state.pageKey, child: const SearchScreen()),
         ),
       ],
     ),
@@ -155,26 +132,14 @@ GoRouter _createRouter(String initialLocation) => GoRouter(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
-            Icons.error_outline_rounded,
-            size: 64,
-            color: Color(0xFFFF3B5C),
-          ),
+          const Icon(Icons.error_outline_rounded, size: 64, color: Color(0xFFFF3B5C)),
           const SizedBox(height: 16),
           Text(
             'Page not found',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
-          Text(
-            state.uri.toString(),
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.white60,
-                ),
-          ),
+          Text(state.uri.toString(), style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white60)),
           const SizedBox(height: 32),
           ElevatedButton.icon(
             onPressed: () => context.go(Routes.home),
@@ -184,9 +149,7 @@ GoRouter _createRouter(String initialLocation) => GoRouter(
               backgroundColor: const Color(0xFF00D9FF),
               foregroundColor: Colors.black,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             ),
           ),
         ],

@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 
 import 'core/services/window_service.dart';
 import 'core/storage/hive_storage.dart';
+import 'core/storage/index_service.dart';
 import 'core/utils/app_logger.dart';
 
 /// Bootstrap the application
@@ -14,22 +15,10 @@ Future<void> bootstrap() async {
   AppLogger.info('Starting NovaIPTV bootstrap...');
 
   // Set preferred orientations
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-    DeviceOrientation.landscapeLeft,
-    DeviceOrientation.landscapeRight,
-  ]);
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown, DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
 
   // Set system UI overlay style
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: Colors.black,
-      systemNavigationBarIconBrightness: Brightness.light,
-    ),
-  );
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(statusBarColor: Colors.transparent, statusBarIconBrightness: Brightness.light, systemNavigationBarColor: Colors.black, systemNavigationBarIconBrightness: Brightness.light));
 
   // Initialize MediaKit
   // Buffering is handled automatically by platform-specific backends:
@@ -45,6 +34,12 @@ Future<void> bootstrap() async {
   AppLogger.debug('Initializing Hive storage...');
   final storage = HiveStorage();
   await storage.init();
+
+  // Build indexes for existing data (runs in background to not block startup)
+  AppLogger.debug('Building Hive indexes...');
+  IndexService.buildAllIndexes().catchError((error) {
+    AppLogger.warning('Index building failed (non-critical): $error');
+  });
 
   // Initialize window service (for window size persistence on desktop)
   AppLogger.debug('Initializing window service...');

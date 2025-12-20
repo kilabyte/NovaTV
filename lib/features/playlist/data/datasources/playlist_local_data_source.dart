@@ -1,6 +1,7 @@
 import 'package:hive_ce/hive.dart';
 
 import '../../../../core/error/exceptions.dart';
+import '../../../../core/storage/hive_index_helper.dart';
 import '../models/channel_model.dart';
 import '../models/playlist_model.dart';
 
@@ -62,14 +63,48 @@ class PlaylistLocalDataSourceImpl implements PlaylistLocalDataSource {
 
   Future<Box<PlaylistModel>> get playlistBox async {
     if (_playlistBox == null || !_playlistBox!.isOpen) {
-      _playlistBox = await Hive.openBox<PlaylistModel>(_playlistBoxName);
+      try {
+        _playlistBox = await Hive.openBox<PlaylistModel>(_playlistBoxName);
+      } catch (e) {
+        // Handle lock errors - wait and retry
+        if (Hive.isBoxOpen(_playlistBoxName)) {
+          try {
+            await Hive.box<PlaylistModel>(_playlistBoxName).close();
+          } catch (_) {
+            // Ignore close errors
+          }
+          await Future.delayed(const Duration(milliseconds: 100));
+          _playlistBox = await Hive.openBox<PlaylistModel>(_playlistBoxName);
+        } else {
+          // Wait and retry once
+          await Future.delayed(const Duration(milliseconds: 200));
+          _playlistBox = await Hive.openBox<PlaylistModel>(_playlistBoxName);
+        }
+      }
     }
     return _playlistBox!;
   }
 
   Future<Box<ChannelModel>> get channelBox async {
     if (_channelBox == null || !_channelBox!.isOpen) {
-      _channelBox = await Hive.openBox<ChannelModel>(_channelBoxName);
+      try {
+        _channelBox = await Hive.openBox<ChannelModel>(_channelBoxName);
+      } catch (e) {
+        // Handle lock errors - wait and retry
+        if (Hive.isBoxOpen(_channelBoxName)) {
+          try {
+            await Hive.box<ChannelModel>(_channelBoxName).close();
+          } catch (_) {
+            // Ignore close errors
+          }
+          await Future.delayed(const Duration(milliseconds: 100));
+          _channelBox = await Hive.openBox<ChannelModel>(_channelBoxName);
+        } else {
+          // Wait and retry once
+          await Future.delayed(const Duration(milliseconds: 200));
+          _channelBox = await Hive.openBox<ChannelModel>(_channelBoxName);
+        }
+      }
     }
     return _channelBox!;
   }
@@ -118,7 +153,14 @@ class PlaylistLocalDataSourceImpl implements PlaylistLocalDataSource {
   Future<List<ChannelModel>> getChannels(String playlistId) async {
     try {
       final box = await channelBox;
-      return box.values.where((c) => c.playlistId == playlistId).toList();
+      // Filter during iteration for better performance
+      final channels = <ChannelModel>[];
+      for (final channel in box.values) {
+        if (channel.playlistId == playlistId) {
+          channels.add(channel);
+        }
+      }
+      return channels;
     } catch (e) {
       throw CacheException('Failed to get channels: $e');
     }
@@ -140,14 +182,34 @@ class PlaylistLocalDataSourceImpl implements PlaylistLocalDataSource {
       final box = await channelBox;
 
       // Delete existing channels for this playlist
-      final existingKeys = box.keys
-          .where((key) => box.get(key)?.playlistId == playlistId)
-          .toList();
+      final existingKeys = box.keys.where((key) => box.get(key)?.playlistId == playlistId).toList();
+
+      // Remove from indexes
+      for (final key in existingKeys) {
+        final oldChannel = box.get(key);
+        if (oldChannel != null && oldChannel.group != null) {
+          await HiveIndexHelper.removeFromIndex(baseBoxName: _channelBoxName, fieldName: 'group', fieldValue: oldChannel.group!, key: key);
+        }
+        if (oldChannel?.isFavorite == true) {
+          await HiveIndexHelper.removeFromIndex(baseBoxName: _channelBoxName, fieldName: 'isFavorite', fieldValue: 'true', key: key);
+        }
+      }
+
       await box.deleteAll(existingKeys);
 
       // Add new channels
       final entries = {for (var c in channels) c.id: c};
       await box.putAll(entries);
+
+      // Update indexes for new channels
+      for (final channel in channels) {
+        if (channel.group != null && channel.group!.isNotEmpty) {
+          await HiveIndexHelper.updateIndex<ChannelModel>(baseBoxName: _channelBoxName, fieldName: 'group', item: channel, getFieldValue: (c) => c.group ?? '', getKey: (c) => c.id);
+        }
+        if (channel.isFavorite) {
+          await HiveIndexHelper.updateIndex<ChannelModel>(baseBoxName: _channelBoxName, fieldName: 'isFavorite', item: channel, getFieldValue: (c) => c.isFavorite ? 'true' : 'false', getKey: (c) => c.id);
+        }
+      }
     } catch (e) {
       throw CacheException('Failed to save channels: $e');
     }
@@ -157,7 +219,29 @@ class PlaylistLocalDataSourceImpl implements PlaylistLocalDataSource {
   Future<void> saveChannel(ChannelModel channel) async {
     try {
       final box = await channelBox;
+
+      // Get old channel for index update
+      final oldChannel = box.get(channel.id);
+      final oldGroup = oldChannel?.group;
+      final oldIsFavorite = oldChannel?.isFavorite;
+
       await box.put(channel.id, channel);
+
+      // Update indexes
+      if (channel.group != null && channel.group!.isNotEmpty) {
+        await HiveIndexHelper.updateIndex<ChannelModel>(baseBoxName: _channelBoxName, fieldName: 'group', item: channel, getFieldValue: (c) => c.group ?? '', getKey: (c) => c.id, oldFieldValue: oldGroup);
+      }
+
+      if (channel.isFavorite != oldIsFavorite) {
+        // Remove from old index entry
+        if (oldIsFavorite == true) {
+          await HiveIndexHelper.removeFromIndex(baseBoxName: _channelBoxName, fieldName: 'isFavorite', fieldValue: 'true', key: channel.id);
+        }
+        // Add to new index entry
+        if (channel.isFavorite) {
+          await HiveIndexHelper.updateIndex<ChannelModel>(baseBoxName: _channelBoxName, fieldName: 'isFavorite', item: channel, getFieldValue: (c) => c.isFavorite ? 'true' : 'false', getKey: (c) => c.id);
+        }
+      }
     } catch (e) {
       throw CacheException('Failed to save channel: $e');
     }
@@ -177,9 +261,7 @@ class PlaylistLocalDataSourceImpl implements PlaylistLocalDataSource {
   Future<void> deleteChannels(String playlistId) async {
     try {
       final box = await channelBox;
-      final keysToDelete = box.keys
-          .where((key) => box.get(key)?.playlistId == playlistId)
-          .toList();
+      final keysToDelete = box.keys.where((key) => box.get(key)?.playlistId == playlistId).toList();
       await box.deleteAll(keysToDelete);
     } catch (e) {
       throw CacheException('Failed to delete channels: $e');
@@ -190,7 +272,30 @@ class PlaylistLocalDataSourceImpl implements PlaylistLocalDataSource {
   Future<List<ChannelModel>> getFavoriteChannels() async {
     try {
       final box = await channelBox;
-      return box.values.where((c) => c.isFavorite).toList();
+
+      // Try to use index if available for faster lookup
+      final indexedKeys = await HiveIndexHelper.getIndexedKeys(baseBoxName: _channelBoxName, fieldName: 'isFavorite', fieldValue: 'true');
+
+      if (indexedKeys.isNotEmpty) {
+        // Use index for fast lookup
+        final favorites = <ChannelModel>[];
+        for (final key in indexedKeys) {
+          final channel = box.get(key);
+          if (channel != null && channel.isFavorite) {
+            favorites.add(channel);
+          }
+        }
+        return favorites;
+      }
+
+      // Fallback to iteration if index doesn't exist
+      final favorites = <ChannelModel>[];
+      for (final channel in box.values) {
+        if (channel.isFavorite) {
+          favorites.add(channel);
+        }
+      }
+      return favorites;
     } catch (e) {
       throw CacheException('Failed to get favorite channels: $e');
     }
@@ -200,10 +305,31 @@ class PlaylistLocalDataSourceImpl implements PlaylistLocalDataSource {
   Future<List<ChannelModel>> getChannelsByGroup(String group) async {
     try {
       final box = await channelBox;
-      final allChannels = box.values.toList();
-      // Use case-insensitive matching for better compatibility with different M3U formats
-      return allChannels.where((c) =>
-        c.group?.toLowerCase() == group.toLowerCase()).toList();
+
+      // Try to use index if available for faster lookup
+      final indexedKeys = await HiveIndexHelper.getIndexedKeys(baseBoxName: _channelBoxName, fieldName: 'group', fieldValue: group);
+
+      if (indexedKeys.isNotEmpty) {
+        // Use index for fast lookup
+        final channels = <ChannelModel>[];
+        for (final key in indexedKeys) {
+          final channel = box.get(key);
+          if (channel != null) {
+            channels.add(channel);
+          }
+        }
+        return channels;
+      }
+
+      // Fallback to iteration if index doesn't exist
+      final lowerGroup = group.toLowerCase();
+      final filteredChannels = <ChannelModel>[];
+      for (final channel in box.values) {
+        if (channel.group?.toLowerCase() == lowerGroup) {
+          filteredChannels.add(channel);
+        }
+      }
+      return filteredChannels;
     } catch (e) {
       throw CacheException('Failed to get channels by group: $e');
     }
@@ -213,15 +339,18 @@ class PlaylistLocalDataSourceImpl implements PlaylistLocalDataSource {
   Future<List<ChannelModel>> searchChannels(String query) async {
     try {
       final box = await channelBox;
+      // CRITICAL: Filter during iteration instead of loading all channels into memory
       final lowerQuery = query.toLowerCase();
-      return box.values.where((c) {
-        final name = c.name.toLowerCase();
-        final tvgName = c.tvgName?.toLowerCase() ?? '';
-        final group = c.group?.toLowerCase() ?? '';
-        return name.contains(lowerQuery) ||
-            tvgName.contains(lowerQuery) ||
-            group.contains(lowerQuery);
-      }).toList();
+      final results = <ChannelModel>[];
+      for (final channel in box.values) {
+        final name = channel.name.toLowerCase();
+        final tvgName = channel.tvgName?.toLowerCase() ?? '';
+        final group = channel.group?.toLowerCase() ?? '';
+        if (name.contains(lowerQuery) || tvgName.contains(lowerQuery) || group.contains(lowerQuery)) {
+          results.add(channel);
+        }
+      }
+      return results;
     } catch (e) {
       throw CacheException('Failed to search channels: $e');
     }
@@ -231,12 +360,14 @@ class PlaylistLocalDataSourceImpl implements PlaylistLocalDataSource {
   Future<List<String>> getAllGroups() async {
     try {
       final box = await channelBox;
-      final groups = box.values
-          .where((c) => c.group != null && c.group!.isNotEmpty)
-          .map((c) => c.group!)
-          .toSet()
-          .toList();
-      groups.sort();
+      // Filter during iteration and use Set for deduplication
+      final groupsSet = <String>{};
+      for (final channel in box.values) {
+        if (channel.group != null && channel.group!.isNotEmpty) {
+          groupsSet.add(channel.group!);
+        }
+      }
+      final groups = groupsSet.toList()..sort();
       return groups;
     } catch (e) {
       throw CacheException('Failed to get groups: $e');

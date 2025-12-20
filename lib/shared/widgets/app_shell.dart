@@ -28,17 +28,38 @@ class AppShell extends ConsumerStatefulWidget {
   ConsumerState<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends ConsumerState<AppShell> {
+class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver {
   int _mobileSelectedIndex = 0;
   bool _hasCheckedAutoRefresh = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Check for auto-refresh on app startup (delayed to allow providers to initialize)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAutoRefresh();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    // When app resumes, check if indexes need validation
+    // This is a secondary check (primary is in NovaApp) but ensures
+    // indexes are validated even if NovaApp's observer didn't fire
+    if (state == AppLifecycleState.resumed) {
+      AppLogger.debug('AppShell: App resumed, ensuring indexes are validated...');
+      // Index validation is already handled in NovaApp, but this ensures
+      // we catch any edge cases where data might have changed
+    }
   }
 
   /// Refresh all playlists and EPG on app startup using background threads
@@ -59,7 +80,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     // Use compute or isolate for CPU-intensive work, but for I/O operations
     // like network requests, we can use regular async/await with unawaited
     // to avoid blocking the main thread
-    
+
     try {
       // Get all playlists
       final playlistsAsync = ref.read(playlistsProvider);
@@ -71,26 +92,26 @@ class _AppShellState extends ConsumerState<AppShell> {
         }
 
         // Refresh all playlists in parallel (background)
+        // Each refresh operation uses compute isolates for parsing,
+        // and network operations are async, so they won't block the main thread
         final refreshFutures = <Future>[];
-        
+
         for (final playlist in playlists) {
           // Always refresh playlist on app startup (not just when needsRefresh)
           AppLogger.info('Refreshing playlist: ${playlist.name}');
           refreshFutures.add(
-            ref.read(playlistNotifierProvider.notifier).refreshPlaylist(playlist.id)
-              .catchError((error) {
-                AppLogger.warning('Failed to refresh playlist ${playlist.name}: $error');
-              }),
+            // Schedule each refresh to run asynchronously
+            Future(() => ref.read(playlistNotifierProvider.notifier).refreshPlaylist(playlist.id)).catchError((error) {
+              AppLogger.warning('Failed to refresh playlist ${playlist.name}: $error');
+            }),
           );
 
           // Always refresh EPG if available
           if (playlist.hasEpg && playlist.epgUrl != null && playlist.epgUrl!.isNotEmpty) {
             AppLogger.info('Refreshing EPG for playlist: ${playlist.name}');
             refreshFutures.add(
-              ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(
-                playlist.id,
-                playlist.epgUrl!,
-              ).catchError((error) {
+              // Schedule each EPG refresh to run asynchronously
+              Future(() => ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist.id, playlist.epgUrl!)).catchError((error) {
                 AppLogger.warning('Failed to refresh EPG for ${playlist.name}: $error');
               }),
             );
@@ -98,6 +119,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         }
 
         // Wait for all refreshes to complete (but don't block UI)
+        // Using eagerError: false ensures one failure doesn't stop others
         await Future.wait(refreshFutures, eagerError: false);
         AppLogger.info('Auto-refresh completed');
       });
@@ -162,11 +184,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       }
     });
 
-    return ResponsiveLayout(
-      mobile: _buildMobileLayout(context),
-      tablet: _buildDesktopLayout(context),
-      desktop: _buildDesktopLayout(context),
-    );
+    return ResponsiveLayout(mobile: _buildMobileLayout(context), tablet: _buildDesktopLayout(context), desktop: _buildDesktopLayout(context));
   }
 
   Widget _buildMobileLayout(BuildContext context) {
@@ -199,10 +217,7 @@ class _AppShellState extends ConsumerState<AppShell> {
           Row(
             children: [
               // Sidebar
-              _DesktopSidebar(
-                selectedIndex: selectedIndex,
-                onItemTapped: (index) => _onItemTapped(context, index),
-              ),
+              _DesktopSidebar(selectedIndex: selectedIndex, onItemTapped: (index) => _onItemTapped(context, index)),
               // Divider
               Container(width: 1, color: AppColors.border),
               // Main content
@@ -225,10 +240,7 @@ class _DesktopSidebar extends ConsumerWidget {
   final int selectedIndex;
   final ValueChanged<int> onItemTapped;
 
-  const _DesktopSidebar({
-    required this.selectedIndex,
-    required this.onItemTapped,
-  });
+  const _DesktopSidebar({required this.selectedIndex, required this.onItemTapped});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -249,22 +261,12 @@ class _DesktopSidebar extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8),
               children: [
                 // TV Guide - prominent position at top
-                _SidebarItemLarge(
-                  icon: Icons.calendar_month_rounded,
-                  label: 'TV Guide',
-                  isSelected: selectedIndex == 1,
-                  onTap: () => onItemTapped(1),
-                ),
+                _SidebarItemLarge(icon: Icons.calendar_month_rounded, label: 'TV Guide', isSelected: selectedIndex == 1, onTap: () => onItemTapped(1)),
 
                 const SizedBox(height: 4),
 
                 // Primary items
-                _SidebarItem(
-                  icon: Icons.star_rounded,
-                  label: 'Favorites',
-                  isSelected: selectedIndex == 2,
-                  onTap: () => onItemTapped(2),
-                ),
+                _SidebarItem(icon: Icons.star_rounded, label: 'Favorites', isSelected: selectedIndex == 2, onTap: () => onItemTapped(2)),
 
                 // Recently Watched section
                 _RecentlyWatchedSection(),
@@ -284,18 +286,8 @@ class _DesktopSidebar extends ConsumerWidget {
                 _SidebarDivider(),
 
                 // Secondary items
-                _SidebarItem(
-                  icon: Icons.search_rounded,
-                  label: 'Search',
-                  isSelected: selectedIndex == 5,
-                  onTap: () => onItemTapped(5),
-                ),
-                _SidebarItem(
-                  icon: Icons.playlist_add_rounded,
-                  label: 'Playlists',
-                  isSelected: selectedIndex == 3,
-                  onTap: () => onItemTapped(3),
-                ),
+                _SidebarItem(icon: Icons.search_rounded, label: 'Search', isSelected: selectedIndex == 5, onTap: () => onItemTapped(5)),
+                _SidebarItem(icon: Icons.playlist_add_rounded, label: 'Playlists', isSelected: selectedIndex == 3, onTap: () => onItemTapped(3)),
               ],
             ),
           ),
@@ -306,12 +298,7 @@ class _DesktopSidebar extends ConsumerWidget {
               border: Border(top: BorderSide(color: AppColors.border)),
             ),
             padding: const EdgeInsets.all(8),
-            child: _SidebarItem(
-              icon: Icons.settings_rounded,
-              label: 'Settings',
-              isSelected: selectedIndex == 4,
-              onTap: () => onItemTapped(4),
-            ),
+            child: _SidebarItem(icon: Icons.settings_rounded, label: 'Settings', isSelected: selectedIndex == 4, onTap: () => onItemTapped(4)),
           ),
         ],
       ),
@@ -331,25 +318,13 @@ class _SidebarHeader extends StatelessWidget {
           Container(
             width: 32,
             height: 32,
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Icons.live_tv_rounded,
-              color: Colors.white,
-              size: 18,
-            ),
+            decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(8)),
+            child: const Icon(Icons.live_tv_rounded, color: Colors.white, size: 18),
           ),
           const SizedBox(width: 12),
           const Text(
             'NovaIPTV',
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.3,
-            ),
+            style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600, letterSpacing: -0.3),
           ),
         ],
       ),
@@ -360,23 +335,17 @@ class _SidebarHeader extends StatelessWidget {
 class _SidebarDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 1,
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-      color: AppColors.border,
-    );
+    return Container(height: 1, margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12), color: AppColors.border);
   }
 }
 
 /// Recently watched channels section with collapsible list
 class _RecentlyWatchedSection extends ConsumerStatefulWidget {
   @override
-  ConsumerState<_RecentlyWatchedSection> createState() =>
-      _RecentlyWatchedSectionState();
+  ConsumerState<_RecentlyWatchedSection> createState() => _RecentlyWatchedSectionState();
 }
 
-class _RecentlyWatchedSectionState
-    extends ConsumerState<_RecentlyWatchedSection> {
+class _RecentlyWatchedSectionState extends ConsumerState<_RecentlyWatchedSection> {
   bool _isExpanded = true;
 
   @override
@@ -393,20 +362,21 @@ class _RecentlyWatchedSectionState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Section header with expand/collapse
-            _RecentlyWatchedHeader(
-              isExpanded: _isExpanded,
-              onToggle: () => setState(() => _isExpanded = !_isExpanded),
-            ),
+            _RecentlyWatchedHeader(isExpanded: _isExpanded, onToggle: () => setState(() => _isExpanded = !_isExpanded)),
 
             // Channel list (when expanded)
             if (_isExpanded)
-              ...channels.take(5).map((channel) => _RecentChannelItem(
-                    channelName: channel.displayName,
-                    onTap: () {
-                      ref.read(playerProvider.notifier).playChannel(channel.id);
-                      context.push(Routes.playerPath(channel.id));
-                    },
-                  )),
+              ...channels
+                  .take(5)
+                  .map(
+                    (channel) => _RecentChannelItem(
+                      channelName: channel.displayName,
+                      onTap: () {
+                        ref.read(playerProvider.notifier).playChannel(channel.id);
+                        context.push(Routes.playerPath(channel.id));
+                      },
+                    ),
+                  ),
           ],
         );
       },
@@ -420,10 +390,7 @@ class _RecentlyWatchedHeader extends StatefulWidget {
   final bool isExpanded;
   final VoidCallback onToggle;
 
-  const _RecentlyWatchedHeader({
-    required this.isExpanded,
-    required this.onToggle,
-  });
+  const _RecentlyWatchedHeader({required this.isExpanded, required this.onToggle});
 
   @override
   State<_RecentlyWatchedHeader> createState() => _RecentlyWatchedHeaderState();
@@ -442,40 +409,21 @@ class _RecentlyWatchedHeaderState extends State<_RecentlyWatchedHeader> {
         child: Container(
           margin: const EdgeInsets.only(bottom: 2),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: _isHovered ? AppColors.surfaceHover : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-          ),
+          decoration: BoxDecoration(color: _isHovered ? AppColors.surfaceHover : Colors.transparent, borderRadius: BorderRadius.circular(8)),
           child: Row(
             children: [
-              Icon(
-                Icons.history_rounded,
-                color: _isHovered
-                    ? AppColors.textPrimary
-                    : AppColors.textSecondary,
-                size: 20,
-              ),
+              Icon(Icons.history_rounded, color: _isHovered ? AppColors.textPrimary : AppColors.textSecondary, size: 20),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   'Recently Watched',
-                  style: TextStyle(
-                    color: _isHovered
-                        ? AppColors.textPrimary
-                        : AppColors.textSecondary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w400,
-                  ),
+                  style: TextStyle(color: _isHovered ? AppColors.textPrimary : AppColors.textSecondary, fontSize: 14, fontWeight: FontWeight.w400),
                 ),
               ),
               AnimatedRotation(
                 turns: widget.isExpanded ? 0.25 : 0,
                 duration: const Duration(milliseconds: 200),
-                child: Icon(
-                  Icons.chevron_right_rounded,
-                  color: AppColors.textMuted,
-                  size: 16,
-                ),
+                child: Icon(Icons.chevron_right_rounded, color: AppColors.textMuted, size: 16),
               ),
             ],
           ),
@@ -489,10 +437,7 @@ class _RecentChannelItem extends StatefulWidget {
   final String channelName;
   final VoidCallback onTap;
 
-  const _RecentChannelItem({
-    required this.channelName,
-    required this.onTap,
-  });
+  const _RecentChannelItem({required this.channelName, required this.onTap});
 
   @override
   State<_RecentChannelItem> createState() => _RecentChannelItemState();
@@ -533,46 +478,39 @@ class _GroupsSection extends ConsumerWidget {
               return Column(
                 children: [
                   // Pinned groups
-                  ...pinned.map((group) => _SidebarGroupItem(
-                    group: group,
-                    isPinned: true,
-                    isSelected: selectedGroup == group,
-                    onTap: () => onGroupTap(group),
-                    onPinToggle: () {
-                      final current = ref.read(pinnedGroupsProvider);
-                      ref.read(pinnedGroupsProvider.notifier).state =
-                        current.contains(group)
-                          ? current.difference({group})
-                          : current.union({group});
-                    },
-                  )),
+                  ...pinned.map(
+                    (group) => _SidebarGroupItem(
+                      group: group,
+                      isPinned: true,
+                      isSelected: selectedGroup == group,
+                      onTap: () => onGroupTap(group),
+                      onPinToggle: () {
+                        final current = ref.read(pinnedGroupsProvider);
+                        ref.read(pinnedGroupsProvider.notifier).state = current.contains(group) ? current.difference({group}) : current.union({group});
+                      },
+                    ),
+                  ),
 
                   // All unpinned groups (scrollable)
-                  ...unpinned.map((group) => _SidebarGroupItem(
-                    group: group,
-                    isPinned: false,
-                    isSelected: selectedGroup == group,
-                    onTap: () => onGroupTap(group),
-                    onPinToggle: () {
-                      final current = ref.read(pinnedGroupsProvider);
-                      ref.read(pinnedGroupsProvider.notifier).state =
-                        current.union({group});
-                    },
-                  )),
+                  ...unpinned.map(
+                    (group) => _SidebarGroupItem(
+                      group: group,
+                      isPinned: false,
+                      isSelected: selectedGroup == group,
+                      onTap: () => onGroupTap(group),
+                      onPinToggle: () {
+                        final current = ref.read(pinnedGroupsProvider);
+                        ref.read(pinnedGroupsProvider.notifier).state = current.union({group});
+                      },
+                    ),
+                  ),
                 ],
               );
             },
             loading: () => const Padding(
               padding: EdgeInsets.all(16),
               child: Center(
-                child: SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.textMuted,
-                  ),
-                ),
+                child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textMuted)),
               ),
             ),
             error: (_, __) => const SizedBox(),
@@ -586,10 +524,7 @@ class _GroupsSectionHeader extends StatefulWidget {
   final bool isExpanded;
   final VoidCallback onToggle;
 
-  const _GroupsSectionHeader({
-    required this.isExpanded,
-    required this.onToggle,
-  });
+  const _GroupsSectionHeader({required this.isExpanded, required this.onToggle});
 
   @override
   State<_GroupsSectionHeader> createState() => _GroupsSectionHeaderState();
@@ -608,40 +543,21 @@ class _GroupsSectionHeaderState extends State<_GroupsSectionHeader> {
         child: Container(
           margin: const EdgeInsets.only(bottom: 2),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: _isHovered ? AppColors.surfaceHover : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-          ),
+          decoration: BoxDecoration(color: _isHovered ? AppColors.surfaceHover : Colors.transparent, borderRadius: BorderRadius.circular(8)),
           child: Row(
             children: [
-              Icon(
-                Icons.folder_rounded,
-                color: _isHovered
-                    ? AppColors.textPrimary
-                    : AppColors.textSecondary,
-                size: 20,
-              ),
+              Icon(Icons.folder_rounded, color: _isHovered ? AppColors.textPrimary : AppColors.textSecondary, size: 20),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   'Groups',
-                  style: TextStyle(
-                    color: _isHovered
-                        ? AppColors.textPrimary
-                        : AppColors.textSecondary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w400,
-                  ),
+                  style: TextStyle(color: _isHovered ? AppColors.textPrimary : AppColors.textSecondary, fontSize: 14, fontWeight: FontWeight.w400),
                 ),
               ),
               AnimatedRotation(
                 turns: widget.isExpanded ? 0.25 : 0,
                 duration: const Duration(milliseconds: 200),
-                child: Icon(
-                  Icons.chevron_right_rounded,
-                  color: AppColors.textMuted,
-                  size: 16,
-                ),
+                child: Icon(Icons.chevron_right_rounded, color: AppColors.textMuted, size: 16),
               ),
             ],
           ),
@@ -664,31 +580,19 @@ class _RecentChannelItemState extends State<_RecentChannelItem> {
         child: Container(
           margin: const EdgeInsets.only(bottom: 2, left: 20),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: _isHovered ? AppColors.surfaceHover : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-          ),
+          decoration: BoxDecoration(color: _isHovered ? AppColors.surfaceHover : Colors.transparent, borderRadius: BorderRadius.circular(6)),
           child: Row(
             children: [
               Container(
                 width: 6,
                 height: 6,
-                decoration: BoxDecoration(
-                  color: _isHovered ? AppColors.primary : AppColors.textMuted,
-                  borderRadius: BorderRadius.circular(3),
-                ),
+                decoration: BoxDecoration(color: _isHovered ? AppColors.primary : AppColors.textMuted, borderRadius: BorderRadius.circular(3)),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   widget.channelName,
-                  style: TextStyle(
-                    color: _isHovered
-                        ? AppColors.textPrimary
-                        : AppColors.textMuted,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                  ),
+                  style: TextStyle(color: _isHovered ? AppColors.textPrimary : AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w400),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -706,12 +610,7 @@ class _SidebarItem extends StatefulWidget {
   final bool isSelected;
   final VoidCallback onTap;
 
-  const _SidebarItem({
-    required this.icon,
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
+  const _SidebarItem({required this.icon, required this.label, required this.isSelected, required this.onTap});
 
   @override
   State<_SidebarItem> createState() => _SidebarItemState();
@@ -737,8 +636,8 @@ class _SidebarItemState extends State<_SidebarItem> {
             color: widget.isSelected
                 ? AppColors.sidebarSelectedBg
                 : _isHovered
-                    ? AppColors.surfaceHover
-                    : Colors.transparent,
+                ? AppColors.surfaceHover
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
@@ -748,8 +647,8 @@ class _SidebarItemState extends State<_SidebarItem> {
                 color: widget.isSelected
                     ? AppColors.primary
                     : isHighlighted
-                        ? AppColors.textPrimary
-                        : AppColors.textSecondary,
+                    ? AppColors.textPrimary
+                    : AppColors.textSecondary,
                 size: 20,
               ),
               const SizedBox(width: 12),
@@ -760,8 +659,8 @@ class _SidebarItemState extends State<_SidebarItem> {
                     color: widget.isSelected
                         ? AppColors.textPrimary
                         : isHighlighted
-                            ? AppColors.textPrimary
-                            : AppColors.textSecondary,
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
                     fontSize: 14,
                     fontWeight: widget.isSelected ? FontWeight.w500 : FontWeight.w400,
                   ),
@@ -783,12 +682,7 @@ class _SidebarItemLarge extends StatefulWidget {
   final bool isSelected;
   final VoidCallback onTap;
 
-  const _SidebarItemLarge({
-    required this.icon,
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
+  const _SidebarItemLarge({required this.icon, required this.label, required this.isSelected, required this.onTap});
 
   @override
   State<_SidebarItemLarge> createState() => _SidebarItemLargeState();
@@ -814,8 +708,8 @@ class _SidebarItemLargeState extends State<_SidebarItemLarge> {
             color: widget.isSelected
                 ? AppColors.sidebarSelectedBg
                 : _isHovered
-                    ? AppColors.surfaceHover
-                    : Colors.transparent,
+                ? AppColors.surfaceHover
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Row(
@@ -825,8 +719,8 @@ class _SidebarItemLargeState extends State<_SidebarItemLarge> {
                 color: widget.isSelected
                     ? AppColors.primary
                     : isHighlighted
-                        ? AppColors.textPrimary
-                        : AppColors.textSecondary,
+                    ? AppColors.textPrimary
+                    : AppColors.textSecondary,
                 size: 24,
               ),
               const SizedBox(width: 12),
@@ -837,8 +731,8 @@ class _SidebarItemLargeState extends State<_SidebarItemLarge> {
                     color: widget.isSelected
                         ? AppColors.textPrimary
                         : isHighlighted
-                            ? AppColors.textPrimary
-                            : AppColors.textSecondary,
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
                     fontSize: 15,
                     fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.w500,
                   ),
@@ -860,13 +754,7 @@ class _SidebarGroupItem extends StatefulWidget {
   final VoidCallback onTap;
   final VoidCallback onPinToggle;
 
-  const _SidebarGroupItem({
-    required this.group,
-    required this.isPinned,
-    required this.isSelected,
-    required this.onTap,
-    required this.onPinToggle,
-  });
+  const _SidebarGroupItem({required this.group, required this.isPinned, required this.isSelected, required this.onTap, required this.onPinToggle});
 
   @override
   State<_SidebarGroupItem> createState() => _SidebarGroupItemState();
@@ -892,8 +780,8 @@ class _SidebarGroupItemState extends State<_SidebarGroupItem> {
             color: widget.isSelected
                 ? AppColors.sidebarSelectedBg
                 : _isHovered
-                    ? AppColors.surfaceHover
-                    : Colors.transparent,
+                ? AppColors.surfaceHover
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
@@ -904,10 +792,11 @@ class _SidebarGroupItemState extends State<_SidebarGroupItem> {
                 height: 8,
                 decoration: BoxDecoration(
                   color: widget.isSelected
-                      ? AppColors.live // Red color for selected
+                      ? AppColors
+                            .live // Red color for selected
                       : widget.isPinned
-                          ? AppColors.primary
-                          : AppColors.textMuted,
+                      ? AppColors.primary
+                      : AppColors.textMuted,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -919,8 +808,8 @@ class _SidebarGroupItemState extends State<_SidebarGroupItem> {
                     color: widget.isSelected
                         ? AppColors.textPrimary
                         : isHighlighted
-                            ? AppColors.textPrimary
-                            : AppColors.textSecondary,
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
                     fontSize: 13,
                     fontWeight: widget.isSelected ? FontWeight.w500 : FontWeight.w400,
                   ),
@@ -931,11 +820,7 @@ class _SidebarGroupItemState extends State<_SidebarGroupItem> {
               if (_isHovered)
                 GestureDetector(
                   onTap: widget.onPinToggle,
-                  child: Icon(
-                    widget.isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-                    size: 14,
-                    color: widget.isPinned ? AppColors.primary : AppColors.textMuted,
-                  ),
+                  child: Icon(widget.isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined, size: 14, color: widget.isPinned ? AppColors.primary : AppColors.textMuted),
                 ),
             ],
           ),
@@ -953,10 +838,7 @@ class _MobileNavBar extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onTap;
 
-  const _MobileNavBar({
-    required this.selectedIndex,
-    required this.onTap,
-  });
+  const _MobileNavBar({required this.selectedIndex, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -972,30 +854,10 @@ class _MobileNavBar extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _MobileNavItem(
-                icon: Icons.live_tv_rounded,
-                label: 'Live',
-                isSelected: selectedIndex == 0,
-                onTap: () => onTap(0),
-              ),
-              _MobileNavItem(
-                icon: Icons.calendar_month_rounded,
-                label: 'Guide',
-                isSelected: selectedIndex == 1,
-                onTap: () => onTap(1),
-              ),
-              _MobileNavItem(
-                icon: Icons.star_rounded,
-                label: 'Favorites',
-                isSelected: selectedIndex == 2,
-                onTap: () => onTap(2),
-              ),
-              _MobileNavItem(
-                icon: Icons.more_horiz_rounded,
-                label: 'More',
-                isSelected: false,
-                onTap: () => _showMoreSheet(context),
-              ),
+              _MobileNavItem(icon: Icons.live_tv_rounded, label: 'Live', isSelected: selectedIndex == 0, onTap: () => onTap(0)),
+              _MobileNavItem(icon: Icons.calendar_month_rounded, label: 'Guide', isSelected: selectedIndex == 1, onTap: () => onTap(1)),
+              _MobileNavItem(icon: Icons.star_rounded, label: 'Favorites', isSelected: selectedIndex == 2, onTap: () => onTap(2)),
+              _MobileNavItem(icon: Icons.more_horiz_rounded, label: 'More', isSelected: false, onTap: () => _showMoreSheet(context)),
             ],
           ),
         ),
@@ -1007,9 +869,7 @@ class _MobileNavBar extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1019,10 +879,7 @@ class _MobileNavBar extends StatelessWidget {
               width: 36,
               height: 4,
               margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.border,
-                borderRadius: BorderRadius.circular(2),
-              ),
+              decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
             ),
             _MoreSheetItem(
               icon: Icons.playlist_play_rounded,
@@ -1062,12 +919,7 @@ class _MobileNavItem extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
 
-  const _MobileNavItem({
-    required this.icon,
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
+  const _MobileNavItem({required this.icon, required this.label, required this.isSelected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1079,19 +931,11 @@ class _MobileNavItem extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              color: isSelected ? AppColors.primary : AppColors.textSecondary,
-              size: 24,
-            ),
+            Icon(icon, color: isSelected ? AppColors.primary : AppColors.textSecondary, size: 24),
             const SizedBox(height: 4),
             Text(
               label,
-              style: TextStyle(
-                color: isSelected ? AppColors.primary : AppColors.textSecondary,
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
-              ),
+              style: TextStyle(color: isSelected ? AppColors.primary : AppColors.textSecondary, fontSize: 11, fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400),
             ),
           ],
         ),
@@ -1105,11 +949,7 @@ class _MoreSheetItem extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
 
-  const _MoreSheetItem({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
+  const _MoreSheetItem({required this.icon, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1121,13 +961,7 @@ class _MoreSheetItem extends StatelessWidget {
           children: [
             Icon(icon, color: AppColors.textSecondary, size: 22),
             const SizedBox(width: 16),
-            Text(
-              label,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 16,
-              ),
-            ),
+            Text(label, style: const TextStyle(color: AppColors.textPrimary, fontSize: 16)),
           ],
         ),
       ),

@@ -17,31 +17,18 @@ class EpgRemoteDataSourceImpl implements EpgRemoteDataSource {
   final Dio _dio;
   final XmltvParser _parser;
 
-  EpgRemoteDataSourceImpl({
-    Dio? dio,
-    XmltvParser? parser,
-  })  : _dio = dio ?? Dio(),
-        _parser = parser ?? XmltvParser();
+  EpgRemoteDataSourceImpl({Dio? dio, XmltvParser? parser}) : _dio = dio ?? Dio(), _parser = parser ?? XmltvParser();
 
   @override
   Future<EpgData> fetchEpg(String url) async {
     try {
       final response = await _dio.get<List<int>>(
         url,
-        options: Options(
-          responseType: ResponseType.bytes,
-          receiveTimeout: const Duration(minutes: 5),
-          headers: {
-            'Accept': 'application/xml, text/xml, application/gzip, */*',
-            'Accept-Encoding': 'gzip, deflate',
-          },
-        ),
+        options: Options(responseType: ResponseType.bytes, receiveTimeout: const Duration(minutes: 5), headers: {'Accept': 'application/xml, text/xml, application/gzip, */*', 'Accept-Encoding': 'gzip, deflate'}),
       );
 
       if (response.statusCode != 200) {
-        throw NetworkException(
-          'Failed to fetch EPG: HTTP ${response.statusCode}',
-        );
+        throw NetworkException('Failed to fetch EPG: HTTP ${response.statusCode}');
       }
 
       final bytes = Uint8List.fromList(response.data ?? []);
@@ -49,10 +36,9 @@ class EpgRemoteDataSourceImpl implements EpgRemoteDataSource {
         throw const NetworkException('EPG response is empty');
       }
 
-      return _parser.parseBytes(bytes, url);
+      return await _parser.parseBytes(bytes, url);
     } on DioException catch (e) {
-      if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.receiveTimeout) {
+      if (e.type == DioExceptionType.connectionTimeout || e.type == DioExceptionType.receiveTimeout) {
         throw const NetworkException('EPG fetch timed out');
       }
       if (e.type == DioExceptionType.connectionError) {

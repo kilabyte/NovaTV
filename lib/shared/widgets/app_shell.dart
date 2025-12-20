@@ -834,14 +834,14 @@ class _SidebarGroupItemState extends State<_SidebarGroupItem> {
 // MOBILE NAV BAR - Clean bottom navigation
 // ═══════════════════════════════════════════════════════════════════════════
 
-class _MobileNavBar extends StatelessWidget {
+class _MobileNavBar extends ConsumerWidget {
   final int selectedIndex;
   final ValueChanged<int> onTap;
 
   const _MobileNavBar({required this.selectedIndex, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.sidebar,
@@ -855,9 +855,103 @@ class _MobileNavBar extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _MobileNavItem(icon: Icons.live_tv_rounded, label: 'Live', isSelected: selectedIndex == 0, onTap: () => onTap(0)),
+              _MobileNavItem(icon: Icons.folder_rounded, label: 'Groups', isSelected: false, onTap: () => _showGroupsSheet(context, ref)),
               _MobileNavItem(icon: Icons.calendar_month_rounded, label: 'Guide', isSelected: selectedIndex == 1, onTap: () => onTap(1)),
               _MobileNavItem(icon: Icons.star_rounded, label: 'Favorites', isSelected: selectedIndex == 2, onTap: () => onTap(2)),
               _MobileNavItem(icon: Icons.more_horiz_rounded, label: 'More', isSelected: false, onTap: () => _showMoreSheet(context)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showGroupsSheet(BuildContext context, WidgetRef ref) {
+    final groupsAsync = ref.read(channelGroupsProvider);
+    final selectedGroup = ref.read(selectedGroupProvider);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => SafeArea(
+          child: Column(
+            children: [
+              // Handle
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+              ),
+              // Header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.folder_rounded, color: AppColors.primary, size: 24),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Groups',
+                      style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
+                    ),
+                    const Spacer(),
+                    groupsAsync.when(
+                      data: (groups) => Text('${groups.length} groups', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                      loading: () => const SizedBox.shrink(),
+                      error: (_, __) => const SizedBox.shrink(),
+                    ),
+                  ],
+                ),
+              ),
+              Divider(color: AppColors.border, height: 1),
+              // Groups list
+              Expanded(
+                child: groupsAsync.when(
+                  data: (groups) {
+                    if (groups.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.folder_off_rounded, size: 48, color: AppColors.textMuted),
+                            const SizedBox(height: 12),
+                            Text('No groups available', style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
+                          ],
+                        ),
+                      );
+                    }
+                    return ListView.builder(
+                      controller: scrollController,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      itemCount: groups.length,
+                      itemBuilder: (context, index) {
+                        final group = groups[index];
+                        final isSelected = group == selectedGroup;
+                        return _MobileGroupItem(
+                          group: group,
+                          isSelected: isSelected,
+                          onTap: () {
+                            ref.read(selectedGroupProvider.notifier).state = group;
+                            Navigator.pop(context);
+                            onTap(0); // Navigate to channels
+                          },
+                        );
+                      },
+                    );
+                  },
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (error, _) => Center(
+                    child: Text('Failed to load groups', style: TextStyle(color: AppColors.textMuted)),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -906,6 +1000,48 @@ class _MobileNavBar extends StatelessWidget {
               },
             ),
             const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Mobile group item for the groups bottom sheet
+class _MobileGroupItem extends StatelessWidget {
+  final String group;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _MobileGroupItem({required this.group, required this.isSelected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary.withValues(alpha: 0.1) : Colors.transparent,
+          border: Border(left: BorderSide(color: isSelected ? AppColors.primary : Colors.transparent, width: 3)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: isSelected ? AppColors.primary : AppColors.textMuted, borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                group,
+                style: TextStyle(color: isSelected ? AppColors.primary : AppColors.textPrimary, fontSize: 15, fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (isSelected) Icon(Icons.check_rounded, color: AppColors.primary, size: 20),
           ],
         ),
       ),

@@ -1,5 +1,6 @@
 import 'package:hive_ce/hive.dart';
 
+import '../../features/epg/data/models/epg_metadata_model.dart';
 import '../../features/epg/data/models/program_model.dart';
 import '../../features/playlist/data/models/channel_model.dart';
 import '../utils/app_logger.dart';
@@ -61,7 +62,7 @@ class IndexService {
 
       // Check EPG program indexes
       if (await Hive.boxExists('epg_metadata')) {
-        final metadataBox = await safeOpenBox('epg_metadata');
+        final metadataBox = await safeOpenBox<EpgMetadataModel>('epg_metadata');
         for (final key in metadataBox.keys) {
           final playlistId = key.toString();
           final programsBoxName = '$_programsBoxPrefix$playlistId';

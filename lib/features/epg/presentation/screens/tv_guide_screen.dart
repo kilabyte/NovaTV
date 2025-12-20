@@ -56,6 +56,9 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
   Future<Map<String, List<Program>>>? _cachedProgramsFuture;
   String? _lastProgramsKey;
 
+  // Current scroll offset for sticky text alignment (works on all platforms)
+  double _currentScrollOffset = 0.0;
+
   @override
   void initState() {
     super.initState();
@@ -75,6 +78,9 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     // Add debounced scroll listener to update selected date as user scrolls
     // Debounce reduces rebuilds during fast scrolling
     _timeHeaderController.addListener(_onHorizontalScrollDebounced);
+
+    // Add scroll listener for sticky text offset (works on all platforms)
+    _programGridController.addListener(_onScrollOffsetChanged);
 
     _scrollToCurrentTimeWithRetry();
 
@@ -220,6 +226,21 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
         final maxOffset = (_totalHours * _hourWidth) - 400.0;
         _timeHeaderController.animateTo(offset.clamp(0.0, maxOffset), duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
       }
+    }
+  }
+
+  /// Scroll offset listener for sticky text alignment on all platforms
+  /// Only triggers rebuild if offset changes significantly (reduces rebuilds)
+  void _onScrollOffsetChanged() {
+    if (!mounted || !_programGridController.hasClients) return;
+
+    final newOffset = _programGridController.offset;
+    // Only rebuild if offset changed by more than 16 pixels (threshold)
+    // Higher threshold = fewer rebuilds = better performance
+    if ((newOffset - _currentScrollOffset).abs() > 16.0) {
+      setState(() {
+        _currentScrollOffset = newOffset;
+      });
     }
   }
 
@@ -558,9 +579,6 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
             }
 
             final programsByChannel = snapshot.data ?? {};
-            if (kDebugMode) {
-              debugPrint('EPG: TV Guide - displaying ${programsByChannel.length} channels with programs');
-            }
 
             return Column(
               children: [
@@ -646,6 +664,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
             ),
           ),
           // Time slots - with date markers at midnight
+          // PERFORMANCE: Only build visible hour markers based on scroll offset
           Expanded(
             child: SingleChildScrollView(
               controller: _timeHeaderController,
@@ -653,59 +672,72 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
               physics: const ClampingScrollPhysics(),
               child: SizedBox(
                 width: totalWidth,
-                // Use ListView.builder instead of Row with List.generate for better performance
-                // This creates widgets lazily and only renders visible items
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _totalHours,
-                  itemBuilder: (context, index) {
-                    final time = startTime.add(Duration(hours: index));
-                    final isCurrentHour = _isCurrentHour(time);
-                    final isMidnight = time.hour == 0;
-                    final now = DateTime.now();
-                    final isToday = time.year == now.year && time.month == now.month && time.day == now.day;
-
-                    return Container(
-                      width: _hourWidth,
-                      decoration: BoxDecoration(
-                        color: isCurrentHour ? AppColors.primary.withValues(alpha: 0.1) : Colors.transparent,
-                        border: Border(
-                          right: BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
-                          // Add a stronger left border at midnight to indicate day change
-                          left: isMidnight ? BorderSide(color: AppColors.primary.withValues(alpha: 0.5), width: 2) : BorderSide.none,
-                        ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 12),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Show date at midnight
-                              if (isMidnight)
-                                Text(
-                                  isToday ? 'Today' : dateFormat.format(time),
-                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.primary),
-                                ),
-                              Text(
-                                timeFormat.format(time),
-                                style: TextStyle(fontSize: 13, fontWeight: isCurrentHour ? FontWeight.w700 : FontWeight.w500, color: isCurrentHour ? AppColors.primary : AppColors.textSecondary),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                child: Row(children: _buildTimeHeaderItems(startTime, dateFormat, timeFormat)),
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  /// Build time header items with viewport optimization
+  /// Only renders full content for visible items, uses lightweight placeholders for others
+  List<Widget> _buildTimeHeaderItems(DateTime startTime, DateFormat dateFormat, DateFormat timeFormat) {
+    final screenWidth = MediaQuery.of(context).size.width - _channelColumnWidth;
+    final viewportBuffer = screenWidth; // Buffer for smooth scrolling
+    final viewportStart = _currentScrollOffset - viewportBuffer;
+    final viewportEnd = _currentScrollOffset + screenWidth + viewportBuffer;
+
+    final now = DateTime.now();
+
+    return List.generate(_totalHours, (index) {
+      final itemStart = index * _hourWidth;
+      final itemEnd = itemStart + _hourWidth;
+
+      // Only build full content for visible items
+      if (itemEnd >= viewportStart && itemStart <= viewportEnd) {
+        final time = startTime.add(Duration(hours: index));
+        final isCurrentHour = _isCurrentHour(time);
+        final isMidnight = time.hour == 0;
+        final isToday = time.year == now.year && time.month == now.month && time.day == now.day;
+
+        return Container(
+          width: _hourWidth,
+          decoration: BoxDecoration(
+            color: isCurrentHour ? AppColors.primary.withValues(alpha: 0.1) : Colors.transparent,
+            border: Border(
+              right: BorderSide(color: AppColors.border.withValues(alpha: 0.5)),
+              left: isMidnight ? BorderSide(color: AppColors.primary.withValues(alpha: 0.5), width: 2) : BorderSide.none,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.only(left: 12),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (isMidnight)
+                    Text(
+                      isToday ? 'Today' : dateFormat.format(time),
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.primary),
+                    ),
+                  Text(
+                    timeFormat.format(time),
+                    style: TextStyle(fontSize: 13, fontWeight: isCurrentHour ? FontWeight.w700 : FontWeight.w500, color: isCurrentHour ? AppColors.primary : AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+
+      // Lightweight placeholder for non-visible items
+      return SizedBox(width: _hourWidth);
+    });
   }
 
   Widget _buildChannelColumn(BuildContext context, List<Channel> channels) {
@@ -718,8 +750,9 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       child: ListView.builder(
         controller: _channelColumnController,
         itemCount: channels.length,
-        // Add itemExtent for better ListView performance (fixed height rows)
-        itemExtent: _rowHeight,
+        // Performance optimizations
+        itemExtent: _rowHeight, // Fixed height for faster layout
+        cacheExtent: _rowHeight * 5, // Preload 5 rows for smoother scrolling
         itemBuilder: (context, index) {
           final channel = channels[index];
           return _ChannelTile(channel: channel, height: _rowHeight, onTap: () => _playChannel(context, channel));
@@ -743,8 +776,11 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
         child: ListView.builder(
           controller: _programGridVerticalController,
           itemCount: channels.length,
-          // Add itemExtent for better ListView performance (fixed height rows)
-          itemExtent: _rowHeight,
+          // Performance optimizations for large lists
+          itemExtent: _rowHeight, // Fixed height rows for faster layout
+          cacheExtent: _rowHeight * 5, // Preload 5 rows for smoother scrolling
+          addAutomaticKeepAlives: false, // Disable keep-alive to reduce memory
+          addRepaintBoundaries: false, // We add our own RepaintBoundary
           itemBuilder: (context, index) {
             final channel = channels[index];
             // Look up programs by channel.id (which is what we use as the map key)
@@ -771,6 +807,13 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
   }
 
   Widget _buildProgramRow(BuildContext context, Channel channel, List<Program> programs, DateTime gridStart, DateTime gridEnd) {
+    // PERFORMANCE: Calculate visible horizontal viewport to only build visible programs
+    // This dramatically reduces widget count when scrolling through 7 days of content
+    final screenWidth = MediaQuery.of(context).size.width - _channelColumnWidth;
+    final viewportBuffer = screenWidth; // Buffer on each side for smooth scrolling
+    final viewportStart = _currentScrollOffset - viewportBuffer;
+    final viewportEnd = _currentScrollOffset + screenWidth + viewportBuffer;
+
     // Programs should already be filtered and sorted from isolate processing
     // But filter again for safety (this is fast since list is already sorted)
     final visiblePrograms = <Program>[];
@@ -800,7 +843,14 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
         final gapDuration = program.start.difference(currentTime);
         final gapWidth = _durationToWidth(gapDuration);
         if (gapWidth > 0) {
-          widgets.add(_buildGap(gapWidth));
+          // Only add gap if it's in or near the visible viewport
+          final gapEnd = currentPosition + gapWidth;
+          if (gapEnd >= viewportStart && currentPosition <= viewportEnd) {
+            widgets.add(_buildGap(gapWidth));
+          } else {
+            // Add invisible spacer for layout purposes
+            widgets.add(SizedBox(width: gapWidth));
+          }
           currentPosition += gapWidth;
         }
       }
@@ -814,7 +864,14 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       final hiddenLeftWidth = program.start.isBefore(gridStart) ? _durationToWidth(gridStart.difference(program.start)) : 0.0;
 
       if (cellWidth > 0) {
-        widgets.add(_ProgramCell(program: program, width: cellWidth, height: _rowHeight, onTap: () => _showProgramDetails(context, program, channel), programStartOffset: currentPosition, hiddenLeftWidth: hiddenLeftWidth, scrollController: _programGridController));
+        final cellEnd = currentPosition + cellWidth;
+        // Only build full program cell if it's in or near the visible viewport
+        if (cellEnd >= viewportStart && currentPosition <= viewportEnd) {
+          widgets.add(_ProgramCell(program: program, width: cellWidth, height: _rowHeight, onTap: () => _showProgramDetails(context, program, channel), programStartOffset: currentPosition, hiddenLeftWidth: hiddenLeftWidth, scrollOffset: _currentScrollOffset));
+        } else {
+          // Add lightweight placeholder for programs outside viewport
+          widgets.add(SizedBox(width: cellWidth, height: _rowHeight));
+        }
         currentPosition += cellWidth;
       }
 
@@ -1233,9 +1290,9 @@ class _ProgramCell extends StatefulWidget {
   final VoidCallback onTap;
   final double programStartOffset; // Cell's position in grid (pixels)
   final double hiddenLeftWidth; // How much extends left of grid start
-  final ScrollController? scrollController;
+  final double scrollOffset; // Current scroll offset for text alignment
 
-  const _ProgramCell({required this.program, required this.width, required this.height, required this.onTap, this.programStartOffset = 0, this.hiddenLeftWidth = 0, this.scrollController});
+  const _ProgramCell({required this.program, required this.width, required this.height, required this.onTap, this.programStartOffset = 0, this.hiddenLeftWidth = 0, this.scrollOffset = 0});
 
   @override
   State<_ProgramCell> createState() => _ProgramCellState();
@@ -1249,7 +1306,8 @@ class _ProgramCellState extends State<_ProgramCell> {
   static final DateFormat _timeFormat = DateFormat.jm();
 
   // Threshold for offset changes to trigger rebuild (pixels)
-  static const double _offsetThreshold = 8.0;
+  // Higher threshold = fewer rebuilds = better performance
+  static const double _offsetThreshold = 16.0;
 
   /// Calculate how much to offset the text based on current scroll position
   /// For currently airing programs, aligns text to current time position
@@ -1263,61 +1321,11 @@ class _ProgramCellState extends State<_ProgramCell> {
     // Don't offset for very narrow cells
     if (widget.width < minCellWidthForOffset) return _lastCalculatedOffset;
 
-    final isAiring = widget.program.isCurrentlyAiring;
     final viewportLeftEdge = scrollOffset;
     final cellLeftEdge = widget.programStartOffset;
 
-    // For currently airing programs, align text to current time position (where progress indicator is)
-    // This ensures text is always visible at "now" even if program extends far to the left
-    if (isAiring && widget.program.progress > 0) {
-      // Calculate where the current time is within the visible cell
-      // progress is 0.0 to 1.0, representing position through the entire program
-      // We need to find where that position is in the visible cell
-      final currentTimePositionInCell = widget.width * widget.program.progress;
-      final currentTimePositionInGrid = cellLeftEdge + currentTimePositionInCell;
-
-      // If current time position is to the left of viewport, offset text to align with it
-      if (currentTimePositionInGrid < viewportLeftEdge) {
-        // Calculate offset needed to align text to current time position
-        // We want the text to start at the current time position
-        var textOffset = viewportLeftEdge - currentTimePositionInGrid;
-
-        // But don't offset so much that text has less than minVisibleTextSpace
-        final maxOffset = widget.width - minVisibleTextSpace - (textPadding * 2);
-        final newOffset = textOffset.clamp(0.0, maxOffset.clamp(0.0, double.infinity));
-
-        // Only update if change exceeds threshold
-        if ((newOffset - _lastCalculatedOffset).abs() >= _offsetThreshold) {
-          _lastCalculatedOffset = newOffset;
-        }
-        return _lastCalculatedOffset;
-      }
-
-      // If current time position is within or to the right of viewport,
-      // check if we need to offset to keep text visible
-      if (currentTimePositionInGrid >= viewportLeftEdge && currentTimePositionInGrid <= viewportLeftEdge + 200) {
-        // Current time is near viewport edge, ensure text is visible
-        // If cell extends left of viewport, offset text to viewport edge
-        if (cellLeftEdge < viewportLeftEdge) {
-          var textOffset = viewportLeftEdge - cellLeftEdge;
-          final maxOffset = widget.width - minVisibleTextSpace - (textPadding * 2);
-          final newOffset = textOffset.clamp(0.0, maxOffset.clamp(0.0, double.infinity));
-
-          if ((newOffset - _lastCalculatedOffset).abs() >= _offsetThreshold) {
-            _lastCalculatedOffset = newOffset;
-          }
-          return _lastCalculatedOffset;
-        }
-      }
-
-      // If current time is well within viewport, no offset needed
-      if (_lastCalculatedOffset != 0.0) {
-        _lastCalculatedOffset = 0.0;
-      }
-      return 0.0;
-    }
-
-    // For non-airing programs, use original viewport edge alignment
+    // For all programs, use smooth viewport edge alignment
+    // This matches v1.0.2 behavior - text "sticks" to the viewport edge as you scroll
     // If cell left edge is still in or ahead of viewport, no offset needed
     if (cellLeftEdge >= viewportLeftEdge) {
       if (_lastCalculatedOffset != 0.0) {
@@ -1357,8 +1365,9 @@ class _ProgramCellState extends State<_ProgramCell> {
           width: widget.width,
           height: widget.height,
           padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 4),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
+          // Use regular Container instead of AnimatedContainer for better performance
+          // AnimatedContainer on every cell causes significant overhead
+          child: Container(
             decoration: BoxDecoration(
               color: _getCellColor(isAiring, hasEnded, _isHovered),
               borderRadius: BorderRadius.circular(8),
@@ -1476,24 +1485,15 @@ class _ProgramCellState extends State<_ProgramCell> {
       );
     }
 
-    // CRITICAL: Disable ListenableBuilder on Android to prevent performance issues
-    // The scroll listener on every cell causes excessive rebuilds and freezes
-    // Only use sticky text on desktop platforms where it's beneficial
-    if (widget.scrollController != null && widget.width > 200 && (defaultTargetPlatform == TargetPlatform.macOS || defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux)) {
-      // Only enable on desktop platforms - disabled on Android/iOS for performance
-      return RepaintBoundary(
-        child: ListenableBuilder(
-          listenable: widget.scrollController!,
-          builder: (context, _) {
-            final offset = _calculateTextOffset(widget.scrollController!.offset);
-            return buildTextContent(offset);
-          },
-        ),
-      );
+    // Use sticky text alignment on all platforms
+    // Scroll offset is passed from parent (no per-cell listeners needed)
+    // Only apply to cells wider than 200px to avoid unnecessary calculations
+    if (widget.width > 200) {
+      final offset = _calculateTextOffset(widget.scrollOffset);
+      return buildTextContent(offset);
     }
 
-    // Otherwise, render without offset (narrow cells don't need sticky text)
-    // This is the default on Android/iOS to prevent performance issues
+    // Narrow cells don't need sticky text
     return buildTextContent(0);
   }
 

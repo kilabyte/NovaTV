@@ -2,6 +2,8 @@ name: Build and Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -209,7 +211,8 @@ jobs:
   release:
     needs: [build-android, build-linux, build-windows, build-macos, build-ios]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+    # Release on: tag push, main branch push, or workflow_dispatch with create_release=true
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
     permissions:
       contents: write
     steps:
@@ -224,14 +227,20 @@ jobs:
       - name: List artifacts
         run: ls -la artifacts/
 
-      - name: Get version from tag
+      - name: Get version
         id: get_version
         run: |
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            # Use tag name as version (e.g., v1.0.6)
             echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            echo "IS_TAG=true" >> $GITHUB_OUTPUT
           else
-            echo "VERSION=dev-$(date +%Y%m%d-%H%M%S)" >> $GITHUB_OUTPUT
+            # Read version from pubspec.yaml (e.g., 1.0.6+1 -> v1.0.6)
+            APP_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | sed 's/+.*//')
+            echo "VERSION=v${APP_VERSION}" >> $GITHUB_OUTPUT
+            echo "IS_TAG=false" >> $GITHUB_OUTPUT
           fi
+          echo "Resolved version: $(cat $GITHUB_OUTPUT | grep VERSION)"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -239,7 +248,8 @@ jobs:
           tag_name: ${{ steps.get_version.outputs.VERSION }}
           name: NovaTV ${{ steps.get_version.outputs.VERSION }}
           draft: false
-          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+          # Main branch commits are prereleases, tagged versions are full releases
+          prerelease: ${{ steps.get_version.outputs.IS_TAG != 'true' }}
           files: |
             artifacts/NovaTV-Android.apk
             artifacts/NovaTV-Android.aab

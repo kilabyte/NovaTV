@@ -66,6 +66,23 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
     player.stream.error.listen((error) {
       if (mounted && error.isNotEmpty) {
+        // Filter out non-fatal errors - media_kit can emit warnings/info as errors
+        // Only show errors if they're actually fatal playback failures
+        final lowerError = error.toLowerCase();
+
+        // Skip non-fatal errors and warnings that don't prevent playback
+        if (lowerError.contains('warning') ||
+            lowerError.contains('deprecated') ||
+            lowerError.contains('discarding') ||
+            lowerError.contains('avi:') ||  // AVI container warnings
+            lowerError.contains('avformat') ||  // FFmpeg format messages
+            lowerError.contains('seek failed') ||  // Seek issues on live streams
+            lowerError.contains('discarding frame') ||
+            lowerError.contains('corrupted') && !lowerError.contains('file')) {
+          // Log but don't show to user - these are recoverable
+          return;
+        }
+
         // On Android, ExoPlayer errors might be more verbose
         // Extract meaningful error message
         String errorMsg = error;
@@ -78,6 +95,12 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
           errorMsg = 'Stream not found: Channel may be unavailable';
         } else if (error.contains('timeout') || error.contains('TIMED_OUT')) {
           errorMsg = 'Connection timeout: Stream server is not responding';
+        } else if (error.contains('Invalid data') || error.contains('invalid data')) {
+          errorMsg = 'Invalid stream format: Channel may be offline';
+        } else if (error.contains('Connection refused') || error.contains('ECONNREFUSED')) {
+          errorMsg = 'Connection refused: Stream server is unavailable';
+        } else if (error.contains('SSL') || error.contains('certificate')) {
+          errorMsg = 'Security error: SSL/certificate issue with stream';
         }
         state = state.copyWith(errorMessage: errorMsg);
       }

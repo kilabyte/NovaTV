@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../../../config/router/routes.dart';
 import '../../../../config/theme/app_colors.dart';
+import '../../../../shared/widgets/refresh_toast.dart';
 import '../../../epg/presentation/providers/epg_providers.dart';
 import '../../../playlist/presentation/providers/playlist_providers.dart';
 import '../providers/settings_providers.dart';
@@ -60,6 +61,7 @@ class SettingsScreen extends ConsumerWidget {
                   title: 'Playlists',
                   children: [
                     _SettingsTile(icon: Icons.playlist_add_rounded, title: 'Manage Playlists', subtitle: 'Add, edit, or remove playlists', onTap: () => context.push(Routes.playlists), showChevron: true),
+                    _SettingsTile(icon: Icons.cloud_download_rounded, title: 'Refresh playlists now', subtitle: 'Download latest channel data', onTap: () => _refreshPlaylists(context, ref)),
                     _ToggleTile(
                       icon: Icons.refresh_rounded,
                       title: 'Auto-refresh playlists',
@@ -380,14 +382,49 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
+  void _refreshPlaylists(BuildContext context, WidgetRef ref) {
+    HapticFeedback.lightImpact();
+    final playlists = ref.read(playlistNotifierProvider);
+    final playlistList = playlists.valueOrNull;
+
+    if (playlistList != null && playlistList.isNotEmpty) {
+      // Show toast for refresh status
+      ref.read(refreshStateProvider.notifier).startPlaylistRefresh();
+
+      // Refresh all playlists
+      Future(() async {
+        bool success = true;
+        for (final playlist in playlistList) {
+          try {
+            await ref.read(playlistNotifierProvider.notifier).refreshPlaylist(playlist.id);
+          } catch (e) {
+            success = false;
+          }
+        }
+        ref.read(refreshStateProvider.notifier).completePlaylistRefresh(success: success);
+      });
+    } else {
+      _showSnackBar(context, 'No playlists to refresh', Icons.warning_rounded, isWarning: true);
+    }
+  }
+
   void _refreshEpg(BuildContext context, WidgetRef ref) {
     HapticFeedback.lightImpact();
     final playlists = ref.read(playlistNotifierProvider);
     final playlist = playlists.valueOrNull?.firstOrNull;
 
     if (playlist?.epgUrl != null) {
-      ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist!.id, playlist.epgUrl!);
-      _showSnackBar(context, 'Refreshing EPG data...', Icons.cloud_download_rounded);
+      // Show toast for refresh status
+      ref.read(refreshStateProvider.notifier).startEpgRefresh();
+
+      Future(() async {
+        try {
+          await ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist!.id, playlist.epgUrl!);
+          ref.read(refreshStateProvider.notifier).completeEpgRefresh(success: true);
+        } catch (e) {
+          ref.read(refreshStateProvider.notifier).completeEpgRefresh(success: false);
+        }
+      });
     } else {
       _showSnackBar(context, 'No EPG URL configured in playlists', Icons.warning_rounded, isWarning: true);
     }
@@ -748,7 +785,7 @@ class _AboutTileState extends State<_AboutTile> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Nova IPTV',
+                'Nova TV',
                 style: TextStyle(color: AppColors.textPrimary, fontSize: 17, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 2),

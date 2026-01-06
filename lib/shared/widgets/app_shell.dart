@@ -11,6 +11,7 @@ import '../../features/player/presentation/providers/player_providers.dart';
 import '../../features/player/presentation/widgets/mini_player.dart';
 import '../../features/playlist/presentation/providers/playlist_providers.dart';
 import '../../features/settings/presentation/providers/settings_providers.dart';
+import 'refresh_toast.dart';
 import 'responsive_layout.dart';
 
 /// Provider to track pinned groups
@@ -91,40 +92,70 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
           return;
         }
 
+        // Show toast that refresh is starting
+        final refreshNotifier = ref.read(refreshStateProvider.notifier);
+        bool hasPlaylist = false;
+        bool hasEpg = false;
+
+        for (final playlist in playlists) {
+          hasPlaylist = true;
+          if (playlist.hasEpg && playlist.epgUrl != null && playlist.epgUrl!.isNotEmpty) {
+            hasEpg = true;
+          }
+        }
+
+        if (hasPlaylist) refreshNotifier.startPlaylistRefresh();
+        if (hasEpg) refreshNotifier.startEpgRefresh();
+
         // Refresh all playlists in parallel (background)
         // Each refresh operation uses compute isolates for parsing,
         // and network operations are async, so they won't block the main thread
-        final refreshFutures = <Future>[];
+        final playlistFutures = <Future>[];
+        final epgFutures = <Future>[];
+        bool playlistSuccess = true;
+        bool epgSuccess = true;
 
         for (final playlist in playlists) {
           // Always refresh playlist on app startup (not just when needsRefresh)
           AppLogger.info('Refreshing playlist: ${playlist.name}');
-          refreshFutures.add(
+          playlistFutures.add(
             // Schedule each refresh to run asynchronously
             Future(() => ref.read(playlistNotifierProvider.notifier).refreshPlaylist(playlist.id)).catchError((error) {
               AppLogger.warning('Failed to refresh playlist ${playlist.name}: $error');
+              playlistSuccess = false;
             }),
           );
 
           // Always refresh EPG if available
           if (playlist.hasEpg && playlist.epgUrl != null && playlist.epgUrl!.isNotEmpty) {
             AppLogger.info('Refreshing EPG for playlist: ${playlist.name}');
-            refreshFutures.add(
+            epgFutures.add(
               // Schedule each EPG refresh to run asynchronously
               Future(() => ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist.id, playlist.epgUrl!)).catchError((error) {
                 AppLogger.warning('Failed to refresh EPG for ${playlist.name}: $error');
+                epgSuccess = false;
               }),
             );
           }
         }
 
-        // Wait for all refreshes to complete (but don't block UI)
-        // Using eagerError: false ensures one failure doesn't stop others
-        await Future.wait(refreshFutures, eagerError: false);
+        // Wait for playlist refreshes
+        if (playlistFutures.isNotEmpty) {
+          await Future.wait(playlistFutures, eagerError: false);
+          refreshNotifier.completePlaylistRefresh(success: playlistSuccess);
+        }
+
+        // Wait for EPG refreshes
+        if (epgFutures.isNotEmpty) {
+          await Future.wait(epgFutures, eagerError: false);
+          refreshNotifier.completeEpgRefresh(success: epgSuccess);
+        }
+
         AppLogger.info('Auto-refresh completed');
       });
     } catch (e) {
       AppLogger.error('Error during auto-refresh: $e');
+      ref.read(refreshStateProvider.notifier).showMessage('Refresh failed', isError: true);
     }
   }
 
@@ -195,6 +226,8 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
           widget.child,
           // Mini-player overlay
           const MiniPlayer(),
+          // Refresh toast overlay
+          const RefreshToast(),
         ],
       ),
       bottomNavigationBar: _MobileNavBar(
@@ -226,6 +259,8 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
           ),
           // Mini-player overlay
           const MiniPlayer(),
+          // Refresh toast overlay
+          const RefreshToast(),
         ],
       ),
     );
@@ -323,7 +358,7 @@ class _SidebarHeader extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           const Text(
-            'NovaIPTV',
+            'Nova TV',
             style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600, letterSpacing: -0.3),
           ),
         ],

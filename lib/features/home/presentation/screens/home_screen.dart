@@ -734,7 +734,7 @@ class _WelcomeScreen extends StatelessWidget {
               ShaderMask(
                 shaderCallback: (bounds) => const LinearGradient(colors: [AppColors.primary, AppColors.auroraPurple]).createShader(bounds),
                 child: const Text(
-                  'Welcome to NovaIPTV',
+                  'Welcome to Nova TV',
                   style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: -0.5),
                 ),
               ),

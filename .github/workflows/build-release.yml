@@ -168,7 +168,7 @@ jobs:
         run: |
           mkdir -p artifacts
           cd build/macos/Build/Products/Release
-          zip -r "$GITHUB_WORKSPACE/artifacts/NovaTV-macOS.zip" NovaIPTV.app
+          zip -r "$GITHUB_WORKSPACE/artifacts/NovaTV-macOS.zip" "Nova TV.app"
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4

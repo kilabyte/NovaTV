@@ -12,7 +12,7 @@ import 'core/utils/app_logger.dart';
 /// Bootstrap the application
 /// Initializes all required services before the app starts
 Future<void> bootstrap() async {
-  AppLogger.info('Starting NovaIPTV bootstrap...');
+  AppLogger.info('Starting Nova TV bootstrap...');
 
   // Set preferred orientations
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown, DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);

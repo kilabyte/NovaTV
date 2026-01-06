@@ -1245,23 +1245,23 @@ class _ChannelTileState extends State<_ChannelTile> {
                 child: widget.channel.logoUrl != null
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(7),
-                        child: Image.network(
-                          widget.channel.logoUrl!,
-                          fit: BoxFit.contain,
-                          // Add caching and error handling for better performance on Android
-                          cacheWidth: 40, // Limit image size for memory efficiency
-                          cacheHeight: 40,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Center(
-                              child: SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2, value: loadingProgress.expectedTotalBytes != null ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes! : null, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary)),
-                              ),
-                            );
-                          },
-                          errorBuilder: (_, __, ___) => Icon(Icons.tv_rounded, size: 18, color: AppColors.textMuted),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Image.network(
+                            widget.channel.logoUrl!,
+                            fit: BoxFit.contain,  // Aspect-fit to prevent distortion
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Center(
+                                child: SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, value: loadingProgress.expectedTotalBytes != null ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes! : null, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary)),
+                                ),
+                              );
+                            },
+                            errorBuilder: (_, __, ___) => Icon(Icons.tv_rounded, size: 18, color: AppColors.textMuted),
+                          ),
                         ),
                       )
                     : Icon(Icons.tv_rounded, size: 18, color: AppColors.textMuted),

@@ -286,6 +286,22 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     // Use baseDate for the full multi-day grid starting from yesterday
     final startTime = _baseDate;
 
+    // Listen to goToNowTrigger to scroll to current time when triggered
+    // This handles: navigation to Guide tab, EPG refresh, playlist refresh
+    ref.listen<int>(goToNowTriggerProvider, (previous, next) {
+      if (previous != null && next != previous) {
+        _scrollToCurrentTimeWithRetry();
+      }
+    });
+
+    // Listen to EPG refresh state - scroll to now when refresh completes
+    ref.listen<AsyncValue<void>>(epgRefreshNotifierProvider, (previous, next) {
+      if (previous?.isLoading == true && next.hasValue) {
+        // EPG refresh completed successfully - scroll to now
+        _scrollToCurrentTimeWithRetry();
+      }
+    });
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Column(

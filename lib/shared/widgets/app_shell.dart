@@ -143,12 +143,16 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
         if (playlistFutures.isNotEmpty) {
           await Future.wait(playlistFutures, eagerError: false);
           refreshNotifier.completePlaylistRefresh(success: playlistSuccess);
+          // Trigger "Go to Now" in TV Guide after playlist refresh
+          ref.read(goToNowTriggerProvider.notifier).state++;
         }
 
         // Wait for EPG refreshes
         if (epgFutures.isNotEmpty) {
           await Future.wait(epgFutures, eagerError: false);
           refreshNotifier.completeEpgRefresh(success: epgSuccess);
+          // Trigger "Go to Now" in TV Guide after EPG refresh
+          ref.read(goToNowTriggerProvider.notifier).state++;
         }
 
         AppLogger.info('Auto-refresh completed');
@@ -182,6 +186,8 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
       case 1:
         context.go(Routes.tvGuide);
         routeToSave = Routes.tvGuide;
+        // Trigger "Go to Now" when navigating to Guide (even if already there)
+        ref.read(goToNowTriggerProvider.notifier).state++;
         break;
       case 2:
         context.go(Routes.favorites);

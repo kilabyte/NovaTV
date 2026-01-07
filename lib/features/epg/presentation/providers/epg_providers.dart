@@ -254,3 +254,8 @@ final selectedDateProvider = StateProvider<DateTime>((ref) {
   final now = DateTime.now();
   return DateTime(now.year, now.month, now.day);
 });
+
+/// Trigger provider for "Go to Now" in TV Guide
+/// Increment this value to trigger the TV Guide to scroll to current time
+/// Used when: navigating to Guide tab, after EPG refresh, after playlist refresh
+final goToNowTriggerProvider = StateProvider<int>((ref) => 0);

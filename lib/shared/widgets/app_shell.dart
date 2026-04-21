@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +11,7 @@ import '../../core/utils/app_logger.dart';
 import '../../features/epg/presentation/providers/epg_providers.dart';
 import '../../features/player/presentation/providers/player_providers.dart';
 import '../../features/player/presentation/widgets/mini_player.dart';
+import '../../features/playlist/domain/entities/playlist.dart';
 import '../../features/playlist/presentation/providers/playlist_providers.dart';
 import '../../features/settings/presentation/providers/settings_providers.dart';
 import 'refresh_toast.dart';
@@ -16,6 +19,10 @@ import 'responsive_layout.dart';
 
 /// Provider to track pinned groups
 final pinnedGroupsProvider = StateProvider<Set<String>>((ref) => {});
+
+/// App-lifetime flag so we only perform the startup auto-refresh once per
+/// process, even if the shell remounts (e.g. router recomputes).
+bool _appStartupRefreshRan = false;
 
 /// Clean modern app shell
 /// Desktop: Left sidebar with groups, main content area
@@ -31,7 +38,6 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver {
   int _mobileSelectedIndex = 0;
-  bool _hasCheckedAutoRefresh = false;
 
   @override
   void initState() {
@@ -63,103 +69,86 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
     }
   }
 
-  /// Refresh all playlists and EPG on app startup using background threads
-  /// This runs in the background to avoid blocking the main UI thread
+  /// Refresh stale playlists and EPG on first app launch.
+  /// Guarded by a process-wide flag so shell remounts don't re-refresh.
   Future<void> _checkAutoRefresh() async {
-    if (_hasCheckedAutoRefresh) return;
-    _hasCheckedAutoRefresh = true;
+    if (_appStartupRefreshRan) return;
+    _appStartupRefreshRan = true;
 
     AppLogger.info('Starting auto-refresh on startup (background thread)...');
-
-    // Run refresh operations in background to avoid blocking UI
-    // Use unawaited to allow UI to continue rendering while refresh happens
-    _refreshInBackground();
+    unawaited(_refreshInBackground());
   }
 
   /// Perform refresh operations in background thread
   Future<void> _refreshInBackground() async {
-    // Use compute or isolate for CPU-intensive work, but for I/O operations
-    // like network requests, we can use regular async/await with unawaited
-    // to avoid blocking the main thread
-
     try {
-      // Get all playlists
-      final playlistsAsync = ref.read(playlistsProvider);
+      // Resolve the actual playlist list, waiting for the provider if needed.
+      final playlists = await ref.read(playlistsProvider.future);
+      if (!mounted) return;
+      if (playlists.isEmpty) {
+        AppLogger.info('No playlists to refresh');
+        return;
+      }
 
-      await playlistsAsync.whenData((playlists) async {
-        if (playlists.isEmpty) {
-          AppLogger.info('No playlists to refresh');
-          return;
+      // Only refresh playlists/EPGs that are actually stale.
+      final stalePlaylists = playlists.where((p) => p.needsRefresh).toList();
+      final staleEpgs = playlists
+          .where((p) => p.hasEpg && p.epgUrl != null && p.epgUrl!.isNotEmpty && p.needsRefresh)
+          .toList();
+
+      if (stalePlaylists.isEmpty && staleEpgs.isEmpty) {
+        AppLogger.info('Auto-refresh: nothing stale, skipping');
+        return;
+      }
+
+      final refreshNotifier = ref.read(refreshStateProvider.notifier);
+      if (stalePlaylists.isNotEmpty) refreshNotifier.startPlaylistRefresh();
+      if (staleEpgs.isNotEmpty) refreshNotifier.startEpgRefresh();
+
+      Future<bool> refreshOne(Playlist p) async {
+        try {
+          AppLogger.info('Refreshing playlist: ${p.name}');
+          await ref.read(playlistNotifierProvider.notifier).refreshPlaylist(p.id);
+          return true;
+        } catch (e) {
+          AppLogger.warning('Failed to refresh playlist ${p.name}: $e');
+          return false;
         }
+      }
 
-        // Show toast that refresh is starting
-        final refreshNotifier = ref.read(refreshStateProvider.notifier);
-        bool hasPlaylist = false;
-        bool hasEpg = false;
-
-        for (final playlist in playlists) {
-          hasPlaylist = true;
-          if (playlist.hasEpg && playlist.epgUrl != null && playlist.epgUrl!.isNotEmpty) {
-            hasEpg = true;
-          }
+      Future<bool> refreshEpg(Playlist p) async {
+        try {
+          AppLogger.info('Refreshing EPG for playlist: ${p.name}');
+          await ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(p.id, p.epgUrl!);
+          return true;
+        } catch (e) {
+          AppLogger.warning('Failed to refresh EPG for ${p.name}: $e');
+          return false;
         }
+      }
 
-        if (hasPlaylist) refreshNotifier.startPlaylistRefresh();
-        if (hasEpg) refreshNotifier.startEpgRefresh();
+      if (stalePlaylists.isNotEmpty) {
+        final results = await Future.wait(stalePlaylists.map(refreshOne), eagerError: false);
+        if (!mounted) return;
+        final allOk = results.every((ok) => ok);
+        refreshNotifier.completePlaylistRefresh(success: allOk);
+        ref.read(goToNowTriggerProvider.notifier).state++;
+      }
 
-        // Refresh all playlists in parallel (background)
-        // Each refresh operation uses compute isolates for parsing,
-        // and network operations are async, so they won't block the main thread
-        final playlistFutures = <Future>[];
-        final epgFutures = <Future>[];
-        bool playlistSuccess = true;
-        bool epgSuccess = true;
+      if (staleEpgs.isNotEmpty) {
+        final results = await Future.wait(staleEpgs.map(refreshEpg), eagerError: false);
+        if (!mounted) return;
+        final allOk = results.every((ok) => ok);
+        refreshNotifier.completeEpgRefresh(success: allOk);
+        ref.read(goToNowTriggerProvider.notifier).state++;
+      }
 
-        for (final playlist in playlists) {
-          // Always refresh playlist on app startup (not just when needsRefresh)
-          AppLogger.info('Refreshing playlist: ${playlist.name}');
-          playlistFutures.add(
-            // Schedule each refresh to run asynchronously
-            Future(() => ref.read(playlistNotifierProvider.notifier).refreshPlaylist(playlist.id)).catchError((error) {
-              AppLogger.warning('Failed to refresh playlist ${playlist.name}: $error');
-              playlistSuccess = false;
-            }),
-          );
-
-          // Always refresh EPG if available
-          if (playlist.hasEpg && playlist.epgUrl != null && playlist.epgUrl!.isNotEmpty) {
-            AppLogger.info('Refreshing EPG for playlist: ${playlist.name}');
-            epgFutures.add(
-              // Schedule each EPG refresh to run asynchronously
-              Future(() => ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist.id, playlist.epgUrl!)).catchError((error) {
-                AppLogger.warning('Failed to refresh EPG for ${playlist.name}: $error');
-                epgSuccess = false;
-              }),
-            );
-          }
-        }
-
-        // Wait for playlist refreshes
-        if (playlistFutures.isNotEmpty) {
-          await Future.wait(playlistFutures, eagerError: false);
-          refreshNotifier.completePlaylistRefresh(success: playlistSuccess);
-          // Trigger "Go to Now" in TV Guide after playlist refresh
-          ref.read(goToNowTriggerProvider.notifier).state++;
-        }
-
-        // Wait for EPG refreshes
-        if (epgFutures.isNotEmpty) {
-          await Future.wait(epgFutures, eagerError: false);
-          refreshNotifier.completeEpgRefresh(success: epgSuccess);
-          // Trigger "Go to Now" in TV Guide after EPG refresh
-          ref.read(goToNowTriggerProvider.notifier).state++;
-        }
-
-        AppLogger.info('Auto-refresh completed');
-      });
-    } catch (e) {
-      AppLogger.error('Error during auto-refresh: $e');
-      ref.read(refreshStateProvider.notifier).showMessage('Refresh failed', isError: true);
+      AppLogger.info('Auto-refresh completed');
+    } catch (e, st) {
+      AppLogger.error('Error during auto-refresh: $e', e, st);
+      if (mounted) {
+        ref.read(refreshStateProvider.notifier).showMessage('Refresh failed', isError: true);
+      }
     }
   }
 
@@ -214,12 +203,13 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final newIndex = _calculateSelectedIndex(context);
-      if (newIndex <= 2 && newIndex != _mobileSelectedIndex) {
-        setState(() => _mobileSelectedIndex = newIndex);
-      }
-    });
+    // Derive the mobile tab index directly from the current route instead of
+    // scheduling a setState() each build; that pattern could schedule an
+    // extra frame on every build even when the index didn't change.
+    final currentIndex = _calculateSelectedIndex(context);
+    if (currentIndex <= 2 && currentIndex != _mobileSelectedIndex) {
+      _mobileSelectedIndex = currentIndex;
+    }
 
     return ResponsiveLayout(mobile: _buildMobileLayout(context), tablet: _buildDesktopLayout(context), desktop: _buildDesktopLayout(context));
   }

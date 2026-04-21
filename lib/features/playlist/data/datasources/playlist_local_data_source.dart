@@ -181,38 +181,40 @@ class PlaylistLocalDataSourceImpl implements PlaylistLocalDataSource {
     try {
       final box = await channelBox;
 
-      // Delete existing channels for this playlist
+      // Delete existing channels for this playlist (no per-channel index writes).
       final existingKeys = box.keys.where((key) => box.get(key)?.playlistId == playlistId).toList();
-
-      // Remove from indexes
-      for (final key in existingKeys) {
-        final oldChannel = box.get(key);
-        if (oldChannel != null && oldChannel.group != null) {
-          await HiveIndexHelper.removeFromIndex(baseBoxName: _channelBoxName, fieldName: 'group', fieldValue: oldChannel.group!, key: key);
-        }
-        if (oldChannel?.isFavorite == true) {
-          await HiveIndexHelper.removeFromIndex(baseBoxName: _channelBoxName, fieldName: 'isFavorite', fieldValue: 'true', key: key);
-        }
-      }
-
       await box.deleteAll(existingKeys);
 
-      // Add new channels
+      // Write the new channels in a single bulk put.
       final entries = {for (var c in channels) c.id: c};
       await box.putAll(entries);
 
-      // Update indexes for new channels
-      for (final channel in channels) {
-        if (channel.group != null && channel.group!.isNotEmpty) {
-          await HiveIndexHelper.updateIndex<ChannelModel>(baseBoxName: _channelBoxName, fieldName: 'group', item: channel, getFieldValue: (c) => c.group ?? '', getKey: (c) => c.id);
-        }
-        if (channel.isFavorite) {
-          await HiveIndexHelper.updateIndex<ChannelModel>(baseBoxName: _channelBoxName, fieldName: 'isFavorite', item: channel, getFieldValue: (c) => c.isFavorite ? 'true' : 'false', getKey: (c) => c.id);
-        }
-      }
+      // Rebuild the group and isFavorite indexes for the entire channel box in
+      // one pass. Doing this per-channel (the previous behavior) caused 10k+
+      // individual Hive writes and a 5-30s UI freeze on large M3U imports.
+      await _rebuildChannelIndexes(box);
     } catch (e) {
       throw CacheException('Failed to save channels: $e');
     }
+  }
+
+  /// Bulk-rebuild the group and isFavorite indexes from the current box state.
+  /// Runs a single clear + putAll per index box instead of N sequential writes.
+  Future<void> _rebuildChannelIndexes(Box<ChannelModel> box) async {
+    await HiveIndexHelper.buildIndex<ChannelModel>(
+      baseBoxName: _channelBoxName,
+      fieldName: 'group',
+      getFieldValue: (c) => c.group ?? '',
+      getKey: (c) => c.id,
+    );
+    // Only index channels that are actually favorites so the index stays
+    // sparse. buildIndex() skips empty field values.
+    await HiveIndexHelper.buildIndex<ChannelModel>(
+      baseBoxName: _channelBoxName,
+      fieldName: 'isFavorite',
+      getFieldValue: (c) => c.isFavorite ? 'true' : '',
+      getKey: (c) => c.id,
+    );
   }
 
   @override

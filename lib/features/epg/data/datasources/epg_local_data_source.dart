@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive_ce/hive.dart';
 
 import '../../../../core/storage/hive_index_helper.dart';
@@ -91,29 +92,22 @@ class EpgLocalDataSourceImpl implements EpgLocalDataSource {
     final indexedKeys = await HiveIndexHelper.getIndexedKeys(baseBoxName: '$_programsBoxPrefix$playlistId', fieldName: 'channelId', fieldValue: channelId);
 
     if (indexedKeys.isNotEmpty) {
-      // Use index for fast lookup
-      final programs = <Program>[];
+      final models = <ProgramModel>[];
       for (final key in indexedKeys) {
         final model = box.get(key);
-        if (model != null) {
-          programs.add(model.toEntity());
-        }
+        if (model != null) models.add(model);
       }
-      programs.sort((a, b) => a.start.compareTo(b.start));
-      return programs;
+      models.sort((a, b) => a.start.compareTo(b.start));
+      return models.map((m) => m.toEntity()).toList(growable: false);
     }
 
-    // Fallback to iteration if index doesn't exist
-    final filteredPrograms = <Program>[];
+    // Fallback: filter on model fields first, only hydrate entities we keep.
+    final models = <ProgramModel>[];
     for (final model in box.values) {
-      final program = model.toEntity();
-      if (program.channelId == channelId) {
-        filteredPrograms.add(program);
-      }
+      if (model.channelId == channelId) models.add(model);
     }
-
-    filteredPrograms.sort((a, b) => a.start.compareTo(b.start));
-    return filteredPrograms;
+    models.sort((a, b) => a.start.compareTo(b.start));
+    return models.map((m) => m.toEntity()).toList(growable: false);
   }
 
   @override
@@ -121,7 +115,6 @@ class EpgLocalDataSourceImpl implements EpgLocalDataSource {
     final box = await safeOpenBox<ProgramModel>('$_programsBoxPrefix$playlistId');
 
     // Try to use date index if available for faster lookup
-    // Get all dates in the range
     final dateKeys = <String>[];
     var current = DateTime(start.year, start.month, start.day);
     final endDate = DateTime(end.year, end.month, end.day);
@@ -132,7 +125,6 @@ class EpgLocalDataSourceImpl implements EpgLocalDataSource {
       current = current.add(const Duration(days: 1));
     }
 
-    // Collect keys from date index
     final indexedKeys = <dynamic>{};
     for (final dateKey in dateKeys) {
       final keys = await HiveIndexHelper.getIndexedKeys(baseBoxName: '$_programsBoxPrefix$playlistId', fieldName: 'startDate', fieldValue: dateKey);
@@ -140,46 +132,57 @@ class EpgLocalDataSourceImpl implements EpgLocalDataSource {
     }
 
     if (indexedKeys.isNotEmpty) {
-      // Use index for fast lookup, then filter by exact time range
-      final programs = <Program>[];
+      // Filter on the model before calling toEntity() so we don't allocate
+      // Program entities for programs outside the range.
+      final models = <ProgramModel>[];
       for (final key in indexedKeys) {
         final model = box.get(key);
-        if (model != null) {
-          final program = model.toEntity();
-          // Filter: program overlaps with the requested range
-          if (program.end.isAfter(start) && program.start.isBefore(end)) {
-            programs.add(program);
-          }
+        if (model != null && model.end.isAfter(start) && model.start.isBefore(end)) {
+          models.add(model);
         }
       }
-      programs.sort((a, b) => a.start.compareTo(b.start));
-      return programs;
+      models.sort((a, b) => a.start.compareTo(b.start));
+      return models.map((m) => m.toEntity()).toList(growable: false);
     }
 
-    // Fallback to iteration if index doesn't exist
-    final filteredPrograms = <Program>[];
+    final models = <ProgramModel>[];
     for (final model in box.values) {
-      final program = model.toEntity();
-      // Filter: program overlaps with the requested range
-      if (program.end.isAfter(start) && program.start.isBefore(end)) {
-        filteredPrograms.add(program);
+      if (model.end.isAfter(start) && model.start.isBefore(end)) {
+        models.add(model);
       }
     }
-
-    // Sort only the filtered results
-    filteredPrograms.sort((a, b) => a.start.compareTo(b.start));
-    return filteredPrograms;
+    models.sort((a, b) => a.start.compareTo(b.start));
+    return models.map((m) => m.toEntity()).toList(growable: false);
   }
 
   @override
   Future<Program?> getCurrentProgram(String playlistId, String channelId) async {
-    final programs = await getProgramsForChannel(playlistId, channelId);
+    final box = await safeOpenBox<ProgramModel>('$_programsBoxPrefix$playlistId');
     final now = DateTime.now();
-    try {
-      return programs.firstWhere((p) => p.start.isBefore(now) && p.end.isAfter(now));
-    } catch (_) {
+
+    final indexedKeys = await HiveIndexHelper.getIndexedKeys(
+      baseBoxName: '$_programsBoxPrefix$playlistId',
+      fieldName: 'channelId',
+      fieldValue: channelId,
+    );
+
+    // Scan only the candidate models. Filter on model fields (no toEntity) and
+    // short-circuit on the first match; we only hydrate the winning entity.
+    if (indexedKeys.isNotEmpty) {
+      for (final key in indexedKeys) {
+        final m = box.get(key);
+        if (m != null && m.start.isBefore(now) && m.end.isAfter(now)) {
+          return m.toEntity();
+        }
+      }
       return null;
     }
+    for (final m in box.values) {
+      if (m.channelId == channelId && m.start.isBefore(now) && m.end.isAfter(now)) {
+        return m.toEntity();
+      }
+    }
+    return null;
   }
 
   @override
@@ -221,14 +224,19 @@ class EpgLocalDataSourceImpl implements EpgLocalDataSource {
     for (final metadata in metadataBox.values) {
       final programsBox = await safeOpenBox<ProgramModel>('$_programsBoxPrefix${metadata.playlistId}');
 
+      // Iterate keys and fetch individually, instead of toMap() which hydrates
+      // the entire box (can be hundreds of MB) into a single Map at once.
       final keysToDelete = <dynamic>[];
-      for (final entry in programsBox.toMap().entries) {
-        if (entry.value.end.isBefore(cutoff)) {
-          keysToDelete.add(entry.key);
+      for (final key in programsBox.keys) {
+        final model = programsBox.get(key);
+        if (model != null && model.end.isBefore(cutoff)) {
+          keysToDelete.add(key);
         }
       }
 
-      await programsBox.deleteAll(keysToDelete);
+      if (keysToDelete.isNotEmpty) {
+        await programsBox.deleteAll(keysToDelete);
+      }
     }
   }
 
@@ -237,57 +245,77 @@ class EpgLocalDataSourceImpl implements EpgLocalDataSource {
     final lowerQuery = query.toLowerCase();
     final now = DateTime.now();
 
-    // Optimize: Filter during iteration instead of loading all programs
     final box = await safeOpenBox<ProgramModel>('$_programsBoxPrefix$playlistId');
 
-    final results = <Program>[];
+    // Filter on the model, only hydrate matches.
+    final models = <ProgramModel>[];
     for (final model in box.values) {
-      final program = model.toEntity();
+      if (model.end.isBefore(now)) continue;
 
-      // Skip programs that have already ended
-      if (program.end.isBefore(now)) continue;
-
-      final title = program.title.toLowerCase();
-      final description = program.description?.toLowerCase() ?? '';
-      final category = program.category?.toLowerCase() ?? '';
+      final title = model.title.toLowerCase();
+      final description = model.description?.toLowerCase() ?? '';
+      final category = model.category?.toLowerCase() ?? '';
 
       if (title.contains(lowerQuery) || description.contains(lowerQuery) || category.contains(lowerQuery)) {
-        results.add(program);
+        models.add(model);
       }
     }
 
-    results.sort((a, b) => a.start.compareTo(b.start));
-    return results;
+    models.sort((a, b) => a.start.compareTo(b.start));
+    return models.map((m) => m.toEntity()).toList(growable: false);
   }
 
-  /// Build indexes for programs in a playlist
-  /// This is called after saving EPG data to maintain indexes
+  /// Build indexes for programs in a playlist.
+  /// The tuple extraction runs in a compute isolate so we don't burn the main
+  /// isolate grouping hundreds of thousands of entries after each EPG refresh.
   Future<void> _buildProgramIndexes(String programsBoxName, List<ProgramModel> programs) async {
     try {
-      // Build channelId index (most frequently queried)
-      final channelIdIndex = <String, List<dynamic>>{};
-      for (final program in programs) {
-        final keys = channelIdIndex.putIfAbsent(program.channelId, () => <dynamic>[]);
-        keys.add(program.id);
-      }
+      // Convert to plain data before sending to the isolate; HiveObjects hold
+      // a reference to their box and can't cross isolate boundaries.
+      final tuples = programs
+          .map((p) => _IndexTuple(p.id, p.channelId, p.start.year, p.start.month, p.start.day))
+          .toList(growable: false);
+
+      final result = await compute(_computeProgramIndexes, tuples);
+
       final channelIdIndexBox = await safeOpenBox<List<dynamic>>('${programsBoxName}_index_channelId');
       await channelIdIndexBox.clear();
-      await channelIdIndexBox.putAll(channelIdIndex);
+      await channelIdIndexBox.putAll(result.channelIdIndex);
 
-      // Build startDate index (for time range queries)
-      final dateIndex = <String, List<dynamic>>{};
-      for (final program in programs) {
-        final date = program.start;
-        final dateKey = '${date.year}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}';
-        final keys = dateIndex.putIfAbsent(dateKey, () => <dynamic>[]);
-        keys.add(program.id);
-      }
       final dateIndexBox = await safeOpenBox<List<dynamic>>('${programsBoxName}_index_startDate');
       await dateIndexBox.clear();
-      await dateIndexBox.putAll(dateIndex);
-    } catch (e) {
-      // Index building is optional - don't throw
-      // Error will be logged if AppLogger is available
+      await dateIndexBox.putAll(result.dateIndex);
+    } catch (_) {
+      // Index building is optional - don't throw.
     }
   }
+}
+
+/// Tuple sent to the index compute isolate. Plain fields only so it serializes
+/// cheaply and can't drag in Hive adapters or controllers.
+class _IndexTuple {
+  final String id;
+  final String channelId;
+  final int year;
+  final int month;
+  final int day;
+  const _IndexTuple(this.id, this.channelId, this.year, this.month, this.day);
+}
+
+class _IndexResult {
+  final Map<String, List<dynamic>> channelIdIndex;
+  final Map<String, List<dynamic>> dateIndex;
+  const _IndexResult(this.channelIdIndex, this.dateIndex);
+}
+
+@pragma('vm:entry-point')
+_IndexResult _computeProgramIndexes(List<_IndexTuple> tuples) {
+  final channelIdIndex = <String, List<dynamic>>{};
+  final dateIndex = <String, List<dynamic>>{};
+  for (final t in tuples) {
+    channelIdIndex.putIfAbsent(t.channelId, () => <dynamic>[]).add(t.id);
+    final dateKey = '${t.year}${t.month.toString().padLeft(2, '0')}${t.day.toString().padLeft(2, '0')}';
+    dateIndex.putIfAbsent(dateKey, () => <dynamic>[]).add(t.id);
+  }
+  return _IndexResult(channelIdIndex, dateIndex);
 }

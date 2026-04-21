@@ -1,6 +1,3 @@
-import 'package:flutter/foundation.dart';
-
-import '../../domain/entities/channel.dart';
 import '../parsers/m3u_parser.dart';
 
 /// Parameters for M3U parsing compute function

@@ -151,11 +151,13 @@ class CinematicSlideUpTransition extends CustomTransitionPage<void> {
                   return Transform(
                     alignment: Alignment.bottomRight,
                     transform: Matrix4.identity()
-                      ..translate(
+                      ..translateByDouble(
                         dx * MediaQuery.of(context).size.width,
                         dy * MediaQuery.of(context).size.height,
+                        0,
+                        1,
                       )
-                      ..scale(scale),
+                      ..scaleByDouble(scale, scale, scale, 1),
                     child: Opacity(
                       opacity: curvedAnimation.value.clamp(0.0, 1.0),
                       child: child,

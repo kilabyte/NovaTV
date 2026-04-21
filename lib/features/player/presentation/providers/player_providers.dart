@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -28,6 +30,11 @@ class PlayerState {
 class PlayerNotifier extends StateNotifier<PlayerState> {
   final Ref _ref;
 
+  /// Subscriptions to the current player's streams. Tracked so we can cancel
+  /// them before disposing the player, otherwise late events from a previous
+  /// player would clobber state for a new channel.
+  final List<StreamSubscription<dynamic>> _subscriptions = [];
+
   PlayerNotifier(this._ref) : super(const PlayerState());
 
   /// Play a channel
@@ -40,75 +47,68 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
     // Create new player
     // Note: Buffering is handled by media_kit with platform-specific backends:
-    // - Desktop (macOS/Windows/Linux): Uses mpv/libmpv (can configure via mpv config files)
-    // - Android: Uses ExoPlayer (buffering handled automatically)
-    // - iOS: Uses AVPlayer (buffering handled automatically)
-    // For desktop platforms, mpv options can be set via environment variables
-    // or mpv config files, but media_kit's Player API doesn't expose direct
-    // buffer configuration methods
+    // - Desktop (macOS/Windows/Linux): Uses mpv/libmpv
+    // - Android: Uses ExoPlayer
+    // - iOS: Uses AVPlayer
     final player = Player();
     final controller = VideoController(player);
 
     state = state.copyWith(player: player, controller: controller, isMinimized: false, clearError: true);
 
-    // Set up listeners
-    player.stream.playing.listen((playing) {
+    // Set up listeners. Track subscriptions so stop() can cancel them before
+    // disposing the player; without this, late events from a prior player can
+    // fire state.copyWith() on the next channel's state.
+    _subscriptions.add(player.stream.playing.listen((playing) {
       if (mounted) {
         state = state.copyWith(isPlaying: playing);
       }
-    });
+    }));
 
-    player.stream.buffering.listen((buffering) {
+    _subscriptions.add(player.stream.buffering.listen((buffering) {
       if (mounted) {
         state = state.copyWith(isBuffering: buffering);
       }
-    });
+    }));
 
-    player.stream.error.listen((error) {
-      if (mounted && error.isNotEmpty) {
-        // Filter out non-fatal errors - media_kit can emit warnings/info as errors
-        // Only show errors if they're actually fatal playback failures
-        final lowerError = error.toLowerCase();
+    _subscriptions.add(player.stream.error.listen((error) {
+      if (!mounted || error.isEmpty) return;
+      // Filter out non-fatal errors - media_kit can emit warnings/info as errors
+      final lowerError = error.toLowerCase();
 
-        // Skip non-fatal errors and warnings that don't prevent playback
-        if (lowerError.contains('warning') ||
-            lowerError.contains('deprecated') ||
-            lowerError.contains('discarding') ||
-            lowerError.contains('avi:') ||  // AVI container warnings
-            lowerError.contains('avformat') ||  // FFmpeg format messages
-            lowerError.contains('seek failed') ||  // Seek issues on live streams
-            lowerError.contains('discarding frame') ||
-            lowerError.contains('corrupted') && !lowerError.contains('file')) {
-          // Log but don't show to user - these are recoverable
-          return;
-        }
-
-        // On Android, ExoPlayer errors might be more verbose
-        // Extract meaningful error message
-        String errorMsg = error;
-        // Common Android/ExoPlayer error patterns
-        if (error.contains('Unable to resolve host') || error.contains('ENETUNREACH')) {
-          errorMsg = 'Network error: Unable to connect to stream server';
-        } else if (error.contains('403') || error.contains('Forbidden')) {
-          errorMsg = 'Access denied: Check your playlist credentials';
-        } else if (error.contains('404') || error.contains('Not Found')) {
-          errorMsg = 'Stream not found: Channel may be unavailable';
-        } else if (error.contains('timeout') || error.contains('TIMED_OUT')) {
-          errorMsg = 'Connection timeout: Stream server is not responding';
-        } else if (error.contains('Invalid data') || error.contains('invalid data')) {
-          errorMsg = 'Invalid stream format: Channel may be offline';
-        } else if (error.contains('Connection refused') || error.contains('ECONNREFUSED')) {
-          errorMsg = 'Connection refused: Stream server is unavailable';
-        } else if (error.contains('SSL') || error.contains('certificate')) {
-          errorMsg = 'Security error: SSL/certificate issue with stream';
-        }
-        state = state.copyWith(errorMessage: errorMsg);
+      if (lowerError.contains('warning') ||
+          lowerError.contains('deprecated') ||
+          lowerError.contains('discarding') ||
+          lowerError.contains('avi:') ||
+          lowerError.contains('avformat') ||
+          lowerError.contains('seek failed') ||
+          lowerError.contains('discarding frame') ||
+          lowerError.contains('corrupted') && !lowerError.contains('file')) {
+        return;
       }
-    });
+
+      String errorMsg = error;
+      if (error.contains('Unable to resolve host') || error.contains('ENETUNREACH')) {
+        errorMsg = 'Network error: Unable to connect to stream server';
+      } else if (error.contains('403') || error.contains('Forbidden')) {
+        errorMsg = 'Access denied: Check your playlist credentials';
+      } else if (error.contains('404') || error.contains('Not Found')) {
+        errorMsg = 'Stream not found: Channel may be unavailable';
+      } else if (error.contains('timeout') || error.contains('TIMED_OUT')) {
+        errorMsg = 'Connection timeout: Stream server is not responding';
+      } else if (error.contains('Invalid data') || error.contains('invalid data')) {
+        errorMsg = 'Invalid stream format: Channel may be offline';
+      } else if (error.contains('Connection refused') || error.contains('ECONNREFUSED')) {
+        errorMsg = 'Connection refused: Stream server is unavailable';
+      } else if (error.contains('SSL') || error.contains('certificate')) {
+        errorMsg = 'Security error: SSL/certificate issue with stream';
+      }
+      state = state.copyWith(errorMessage: errorMsg);
+    }));
 
     // Load channel
     final repository = _ref.read(playlistRepositoryProvider);
     final result = await repository.getChannel(channelId);
+    if (!mounted) return;
 
     result.fold(
       (failure) {
@@ -118,7 +118,6 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         try {
           state = state.copyWith(channel: channel);
 
-          // Build HTTP headers
           final httpHeaders = <String, String>{};
           if (channel.userAgent != null) {
             httpHeaders['User-Agent'] = channel.userAgent!;
@@ -130,10 +129,8 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
             httpHeaders.addAll(channel.headers!);
           }
 
-          // Open and play - wrap in try-catch to handle Android/ExoPlayer exceptions
           await player.open(Media(channel.url, httpHeaders: httpHeaders.isNotEmpty ? httpHeaders : null));
         } catch (e) {
-          // Catch any exceptions from player.open() (common on Android with ExoPlayer)
           if (mounted) {
             state = state.copyWith(errorMessage: 'Failed to start playback: ${e.toString()}');
           }
@@ -163,28 +160,34 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
   /// Stop and dispose player
   Future<void> stop() async {
+    // Cancel stream listeners first so late events cannot clobber the
+    // subsequent state = const PlayerState() or a new channel's state.
+    for (final sub in _subscriptions) {
+      await sub.cancel();
+    }
+    _subscriptions.clear();
     await state.player?.dispose();
-    state = const PlayerState();
+    if (mounted) {
+      state = const PlayerState();
+    }
   }
 
   /// Retry playback
-  /// Clears error state and attempts to play the channel again
   Future<void> retry() async {
     final channelId = state.channel?.id;
     if (channelId != null) {
-      // Clear error state before retrying
       state = state.copyWith(clearError: true);
-      // Small delay to ensure state is cleared before retry
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
       await playChannel(channelId);
     }
   }
 
   @override
-  bool get mounted => true; // StateNotifier is always "mounted" while active
-
-  @override
   void dispose() {
+    for (final sub in _subscriptions) {
+      sub.cancel();
+    }
+    _subscriptions.clear();
     state.player?.dispose();
     super.dispose();
   }

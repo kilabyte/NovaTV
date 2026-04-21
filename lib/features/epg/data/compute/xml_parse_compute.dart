@@ -1,12 +1,6 @@
-import 'dart:convert';
-import 'dart:io';
-import 'dart:typed_data';
-
-import 'package:flutter/foundation.dart';
 import 'package:xml/xml.dart';
 
 import '../../domain/entities/epg_channel.dart';
-import '../../domain/entities/epg_data.dart';
 import '../../domain/entities/program.dart';
 
 /// Parameters for parseXmltvContent compute function

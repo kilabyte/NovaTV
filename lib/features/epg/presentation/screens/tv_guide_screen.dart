@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -90,28 +91,32 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     });
   }
 
-  /// Refresh EPG data when TV Guide screen is opened
-  /// Runs in background to avoid blocking UI
+  /// Refresh EPG data when TV Guide screen is opened, but only if the cached
+  /// data is actually stale. Otherwise we'd double-refresh right after the
+  /// startup auto-refresh ran.
   void _refreshEpgOnOpen() {
-    // Run refresh in background to avoid blocking UI
-    // Access ref through the widget's context
     Future.microtask(() async {
       if (!mounted) return;
 
       try {
         final playlists = ref.read(playlistNotifierProvider);
         final playlist = playlists.valueOrNull?.firstOrNull;
+        if (playlist == null || playlist.epgUrl == null || playlist.epgUrl!.isEmpty) return;
 
-        if (playlist?.epgUrl != null && playlist!.epgUrl!.isNotEmpty) {
-          // Refresh EPG in background
-          await ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist.id, playlist.epgUrl!);
-        }
-      } catch (e) {
-        // Silently fail - EPG refresh is a background operation
-        // User can manually refresh if needed
+        // Skip if we have cached EPG data that's still valid.
+        final hasValid = await ref.read(hasValidEpgDataProvider(playlist.id).future);
+        if (!mounted || hasValid) return;
+
+        await ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist.id, playlist.epgUrl!);
+      } catch (_) {
+        // Background operation; user can manually refresh.
       }
     });
   }
+
+  /// Timer used when the scroll controllers aren't attached yet; cancelled in
+  /// dispose() so late fires can't touch disposed state.
+  Timer? _scrollToNowRetryTimer;
 
   void _scrollToCurrentTimeWithRetry({int attempts = 0}) {
     if (attempts >= 10) return;
@@ -121,13 +126,15 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
 
       if (_timeHeaderController.hasClients) {
         _scrollToCurrentTime();
-      } else {
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (mounted) {
-            _scrollToCurrentTimeWithRetry(attempts: attempts + 1);
-          }
-        });
+        return;
       }
+
+      _scrollToNowRetryTimer?.cancel();
+      _scrollToNowRetryTimer = Timer(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          _scrollToCurrentTimeWithRetry(attempts: attempts + 1);
+        }
+      });
     });
   }
 
@@ -211,6 +218,21 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     }
   }
 
+  /// Jump the grid's horizontal viewport to the start of [date].
+  void _scrollToDate(DateTime date) {
+    if (!_timeHeaderController.hasClients) return;
+    final target = DateTime(date.year, date.month, date.day);
+    final minutesSinceBase = target.difference(_baseDate).inMinutes;
+    if (minutesSinceBase < 0) return;
+    final offset = (minutesSinceBase / 60.0) * _hourWidth;
+    final maxOffset = (_totalHours * _hourWidth) - 400.0;
+    _timeHeaderController.animateTo(
+      offset.clamp(0.0, maxOffset),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+
   void _scrollToCurrentTime() {
     // Scroll so that current time is offset to the right (about 1/3 from left edge)
     // This gives better visibility of what's currently playing
@@ -270,6 +292,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
   @override
   void dispose() {
     _scrollDebounceTimer?.cancel();
+    _scrollToNowRetryTimer?.cancel();
     _timeHeaderController.dispose();
     _programGridController.dispose();
     _channelColumnController.dispose();
@@ -446,6 +469,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
               isSelected: isSelected,
               onTap: () {
                 ref.read(selectedDateProvider.notifier).state = date;
+                _scrollToDate(date);
               },
             ),
           );
@@ -1263,20 +1287,19 @@ class _ChannelTileState extends State<_ChannelTile> {
                         borderRadius: BorderRadius.circular(7),
                         child: Padding(
                           padding: const EdgeInsets.all(4),
-                          child: Image.network(
-                            widget.channel.logoUrl!,
-                            fit: BoxFit.contain,  // Aspect-fit to prevent distortion
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return Center(
-                                child: SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2, value: loadingProgress.expectedTotalBytes != null ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes! : null, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary)),
-                                ),
-                              );
-                            },
-                            errorBuilder: (_, __, ___) => Icon(Icons.tv_rounded, size: 18, color: AppColors.textMuted),
+                          child: CachedNetworkImage(
+                            imageUrl: widget.channel.logoUrl!,
+                            fit: BoxFit.contain,
+                            memCacheWidth: 80,
+                            memCacheHeight: 80,
+                            placeholder: (_, __) => Center(
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary)),
+                              ),
+                            ),
+                            errorWidget: (_, __, ___) => Icon(Icons.tv_rounded, size: 18, color: AppColors.textMuted),
                           ),
                         ),
                       )

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -109,12 +111,22 @@ final channelsByPlaylistProvider = FutureProvider.family<List<Channel>, String>(
 });
 
 /// Provider for channel search
-final searchQueryProvider = StateProvider<String>((ref) => '');
+final searchQueryProvider = StateProvider.autoDispose<String>((ref) => '');
 
 /// Combined search results provider that searches both channels and EPG programs
-final searchResultsProvider = FutureProvider<List<SearchResult>>((ref) async {
+final searchResultsProvider = FutureProvider.autoDispose<List<SearchResult>>((ref) async {
   final query = ref.watch(searchQueryProvider);
   if (query.isEmpty || query.length < 2) return [];
+
+  // Debounce: if the query changes within 250ms, cancel this computation.
+  final completer = Completer<void>();
+  final timer = Timer(const Duration(milliseconds: 250), () => completer.complete());
+  ref.onDispose(() {
+    timer.cancel();
+    if (!completer.isCompleted) completer.complete();
+  });
+  await completer.future;
+  if (ref.read(searchQueryProvider) != query) return [];
 
   final results = <SearchResult>[];
   final seenChannelIds = <String>{};
@@ -209,11 +221,8 @@ class PlaylistNotifier extends StateNotifier<AsyncValue<List<Playlist>>> {
 
     result.fold((failure) => throw Exception(failure.message), (playlist) {
       _loadPlaylists();
-      // Invalidate related providers
-      _ref.invalidate(allChannelsProvider);
-      _ref.invalidate(channelGroupsProvider);
+      _invalidateChannelProviders();
 
-      // Auto-refresh EPG if an EPG URL is available
       final effectiveEpgUrl = playlist.epgUrl;
       if (effectiveEpgUrl != null && effectiveEpgUrl.isNotEmpty) {
         _ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist.id, effectiveEpgUrl);
@@ -222,26 +231,19 @@ class PlaylistNotifier extends StateNotifier<AsyncValue<List<Playlist>>> {
   }
 
   /// Refresh playlist from remote source
-  /// Network fetch and M3U parsing run in background threads to prevent UI blocking
-  /// M3U parsing uses compute isolate (handled in playlist_repository_impl.dart)
   Future<void> refreshPlaylist(String playlistId) async {
-    // Schedule the refresh operation to run asynchronously
-    // This ensures the main thread remains responsive
     final useCase = _ref.read(refreshPlaylistUseCaseProvider);
     final result = await Future(() => useCase(playlistId));
 
     result.fold((failure) => throw Exception(failure.message), (playlist) {
       _loadPlaylists();
-      _ref.invalidate(allChannelsProvider);
-      _ref.invalidate(channelGroupsProvider);
+      _invalidateChannelProviders();
       _ref.invalidate(channelsByPlaylistProvider(playlistId));
 
-      // Also refresh EPG if available (runs in background)
       final epgUrl = playlist.epgUrl;
       if (epgUrl != null && epgUrl.isNotEmpty) {
-        // Schedule EPG refresh to run asynchronously
-        Future(() => _ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist.id, epgUrl)).catchError((error) {
-          // Silently handle EPG refresh errors - it's a background operation
+        Future(() => _ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist.id, epgUrl)).catchError((Object _) {
+          // Background EPG refresh errors are surfaced by the EPG notifier itself.
         });
       }
     });
@@ -251,11 +253,23 @@ class PlaylistNotifier extends StateNotifier<AsyncValue<List<Playlist>>> {
     final useCase = _ref.read(deletePlaylistUseCaseProvider);
     final result = await useCase(playlistId);
 
-    result.fold((failure) => throw Exception(failure.message), (_) {
+    await result.fold((failure) async => throw Exception(failure.message), (_) async {
+      // Delete orphaned EPG data for this playlist. Failure here is non-fatal:
+      // the playlist row is already gone so stale EPG is harmless.
+      try {
+        await _ref.read(epgRepositoryProvider).deleteEpgData(playlistId);
+      } catch (_) {}
       _loadPlaylists();
-      _ref.invalidate(allChannelsProvider);
-      _ref.invalidate(channelGroupsProvider);
+      _invalidateChannelProviders();
+      _ref.invalidate(channelsByPlaylistProvider(playlistId));
     });
+  }
+
+  void _invalidateChannelProviders() {
+    _ref.invalidate(allChannelsProvider);
+    _ref.invalidate(channelGroupsProvider);
+    _ref.invalidate(filteredChannelsProvider);
+    _ref.invalidate(favoriteChannelsProvider);
   }
 
   void refresh() {
@@ -281,6 +295,7 @@ class FavoriteNotifier extends StateNotifier<AsyncValue<void>> {
     state = result.fold((failure) => AsyncValue.error(failure.message, StackTrace.current), (_) {
       _ref.invalidate(favoriteChannelsProvider);
       _ref.invalidate(allChannelsProvider);
+      _ref.invalidate(filteredChannelsProvider);
       return const AsyncValue.data(null);
     });
   }
@@ -311,6 +326,10 @@ class RecentlyWatchedNotifier extends StateNotifier<List<String>> {
 
   Box? _box;
 
+  /// Completes when the Hive box has been loaded (or failed). Mutations await
+  /// this so the initial persisted list can't be clobbered by an early write.
+  final Completer<void> _ready = Completer<void>();
+
   RecentlyWatchedNotifier() : super([]) {
     _loadFromHive();
   }
@@ -324,8 +343,9 @@ class RecentlyWatchedNotifier extends StateNotifier<List<String>> {
         state = List<String>.from(stored);
       }
     } catch (e) {
-      // Silently fail - recently watched is not critical
       debugPrint('Failed to load recently watched: $e');
+    } finally {
+      if (!_ready.isCompleted) _ready.complete();
     }
   }
 
@@ -359,24 +379,27 @@ class RecentlyWatchedNotifier extends StateNotifier<List<String>> {
     await _box?.put(_key, state);
   }
 
-  /// Add a channel to recently watched (moves to front if already exists)
-  void addChannel(String channelId) {
+  /// Add a channel to recently watched (moves to front if already exists).
+  /// Awaits the Hive load first so the persisted list isn't overwritten with
+  /// just [channelId] when the user plays a channel during startup.
+  Future<void> addChannel(String channelId) async {
+    await _ready.future;
     final newList = state.where((id) => id != channelId).toList();
     newList.insert(0, channelId);
 
-    // Keep only the most recent N channels
     if (newList.length > maxRecentChannels) {
       newList.removeRange(maxRecentChannels, newList.length);
     }
 
     state = newList;
-    _saveToHive();
+    await _saveToHive();
   }
 
   /// Clear all recently watched
-  void clear() {
+  Future<void> clear() async {
+    await _ready.future;
     state = [];
-    _saveToHive();
+    await _saveToHive();
   }
 }
 

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -205,13 +206,12 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
     if (channel?.logoUrl != null && channel!.logoUrl!.isNotEmpty) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(4),
-        child: Image.network(
-          channel.logoUrl!,
+        child: CachedNetworkImage(
+          imageUrl: channel.logoUrl!,
           fit: BoxFit.contain,
-          // Add caching for better performance
-          cacheWidth: 100,
-          cacheHeight: 100,
-          errorBuilder: (_, __, ___) => Icon(Icons.live_tv_rounded, size: 14, color: AppColors.textMuted),
+          memCacheWidth: 100,
+          memCacheHeight: 100,
+          errorWidget: (_, __, ___) => Icon(Icons.live_tv_rounded, size: 14, color: AppColors.textMuted),
         ),
       );
     }
@@ -224,7 +224,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
     final end = program.end as DateTime;
     final totalDuration = end.difference(start).inSeconds;
     final elapsed = now.difference(start).inSeconds;
-    final progress = (elapsed / totalDuration).clamp(0.0, 1.0);
+    final progress = totalDuration <= 0 ? 0.0 : (elapsed / totalDuration).clamp(0.0, 1.0);
 
     return Container(
       height: 3,

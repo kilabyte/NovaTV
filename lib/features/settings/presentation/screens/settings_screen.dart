@@ -10,7 +10,6 @@ import '../../../../shared/widgets/refresh_toast.dart';
 import '../../../epg/presentation/providers/epg_providers.dart';
 import '../../../playlist/presentation/providers/playlist_providers.dart';
 import '../providers/settings_providers.dart';
-import 'index_stats_screen.dart';
 
 /// Clean settings screen with solid dark design
 class SettingsScreen extends ConsumerWidget {

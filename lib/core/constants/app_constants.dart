@@ -37,9 +37,6 @@ class AppConstants {
 
   /// Player controls auto-hide delay in seconds
   static const int playerControlsHideDelay = 5;
-
-  /// Channel logo placeholder
-  static const String channelLogoPlaceholder = 'assets/images/channel_placeholder.png';
 }
 
 /// Responsive breakpoints

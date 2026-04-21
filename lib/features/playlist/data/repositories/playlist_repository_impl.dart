@@ -141,14 +141,19 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
         return Channel(id: json['id'] as String, name: json['name'] as String, url: json['url'] as String, playlistId: json['playlistId'] as String, tvgId: json['tvgId'] as String?, tvgName: json['tvgName'] as String?, logoUrl: json['logoUrl'] as String?, group: json['group'] as String?, language: json['language'] as String?, country: json['country'] as String?, tvgShift: json['tvgShift'] as int?, userAgent: json['userAgent'] as String?, referrer: json['referrer'] as String?, headers: json['headers'] != null ? Map<String, String>.from(json['headers'] as Map) : null, licenseUrl: json['licenseUrl'] as String?, licenseType: json['licenseType'] as String?, isFavorite: json['isFavorite'] as bool? ?? false, channelNumber: json['channelNumber'] as int?, catchupType: json['catchupType'] as String?, catchupSource: json['catchupSource'] as String?, catchupDays: json['catchupDays'] as int?);
       }).toList();
 
-      // Preserve favorite status from existing channels
+      // Preserve favorite status from existing channels.
+      // Identity tuple includes group so duplicate names across groups don't
+      // collide (e.g. "News" in "USA" vs "News" in "UK").
+      String favKey(String? tvgId, String name, String? group) => '${tvgId ?? ''}|$name|${group ?? ''}';
       final existingChannels = await _localDataSource.getChannels(id);
-      final favoriteIds = existingChannels.where((c) => c.isFavorite).map((c) => c.tvgId ?? c.name).toSet();
+      final favoriteIds = existingChannels
+          .where((c) => c.isFavorite)
+          .map((c) => favKey(c.tvgId, c.name, c.group))
+          .toSet();
 
       // Apply favorite status to new channels
       final channelsWithFavorites = channels.map((c) {
-        final identifier = c.tvgId ?? c.name;
-        if (favoriteIds.contains(identifier)) {
+        if (favoriteIds.contains(favKey(c.tvgId, c.name, c.group))) {
           return c.copyWith(isFavorite: true);
         }
         return c;

@@ -174,7 +174,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     return PopScope(
       // Handle Android back button - allow going back even when there's an error
       canPop: true,
-      onPopInvoked: (didPop) {
+      onPopInvokedWithResult: (didPop, _) {
         if (didPop) {
           // Clear error state when popping
           ref.read(playerProvider.notifier).minimize();
@@ -682,7 +682,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final end = program.end as DateTime;
     final totalDuration = end.difference(start).inSeconds;
     final elapsed = now.difference(start).inSeconds;
-    final progress = (elapsed / totalDuration).clamp(0.0, 1.0);
+    final progress = totalDuration <= 0 ? 0.0 : (elapsed / totalDuration).clamp(0.0, 1.0);
 
     return Column(
       children: [

@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 import '../../../playlist/domain/entities/channel.dart';
 import '../../domain/entities/program.dart';
 

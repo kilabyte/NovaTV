@@ -151,10 +151,63 @@ jobs:
         working-directory: macos
         run: pod install --repo-update
 
-      - name: Build macOS
+      - name: Determine signing capability
+        id: signing
+        env:
+          CERT: ${{ secrets.MACOS_CERTIFICATE }}
+          NOTARY_USER: ${{ secrets.MACOS_NOTARY_USER }}
+          CODESIGN_ID: ${{ secrets.MACOS_CODESIGN_ID }}
         run: |
-          flutter build macos --release \
-            --config-only
+          if [ -n "$CERT" ] && [ -n "$NOTARY_USER" ] && [ -n "$CODESIGN_ID" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Signing + notarization enabled."
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Signing secrets missing; building unsigned macOS app (set MACOS_CERTIFICATE, MACOS_CERTIFICATE_PWD, MACOS_CODESIGN_ID, MACOS_NOTARY_USER, MACOS_NOTARY_PWD, MACOS_TEAM_ID to enable)."
+          fi
+
+      - name: Import Developer ID certificate
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          KEYCHAIN_PWD=$(openssl rand -base64 32)
+          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+          echo -n "$MACOS_CERTIFICATE" | base64 --decode > "$CERT_PATH"
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+          rm "$CERT_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+
+          # Prepend our keychain to the search list so codesign can find the identity.
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/[\"[:space:]]//g')
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Build macOS (signed)
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          CODESIGN_ID: ${{ secrets.MACOS_CODESIGN_ID }}
+        run: |
+          flutter build macos --release --config-only
+          xcodebuild -workspace macos/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -derivedDataPath build/macos \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="$CODESIGN_ID" \
+            OTHER_CODE_SIGN_FLAGS="--timestamp --options=runtime" \
+            ARCHS="x86_64 arm64"
+
+      - name: Build macOS (unsigned fallback)
+        if: steps.signing.outputs.enabled != 'true'
+        run: |
+          flutter build macos --release --config-only
           xcodebuild -workspace macos/Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
@@ -164,11 +217,38 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             ARCHS="x86_64 arm64"
 
+      - name: Notarize and staple
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          NOTARY_USER: ${{ secrets.MACOS_NOTARY_USER }}
+          NOTARY_PWD: ${{ secrets.MACOS_NOTARY_PWD }}
+          TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+        run: |
+          APP_PATH="build/macos/Build/Products/Release/NovaTV.app"
+          ZIP_PATH="$RUNNER_TEMP/NovaTV-notarize.zip"
+
+          # ditto preserves symlinks and bundle structure that the notary service requires.
+          ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
+
+          xcrun notarytool submit "$ZIP_PATH" \
+            --apple-id "$NOTARY_USER" \
+            --password "$NOTARY_PWD" \
+            --team-id "$TEAM_ID" \
+            --wait
+
+          xcrun stapler staple "$APP_PATH"
+          spctl --assess --verbose --type execute "$APP_PATH"
+
       - name: Create zip
         run: |
           mkdir -p artifacts
           cd build/macos/Build/Products/Release
-          zip -r "$GITHUB_WORKSPACE/artifacts/NovaTV-macOS.zip" NovaTV.app
+          ditto -c -k --keepParent NovaTV.app "$GITHUB_WORKSPACE/artifacts/NovaTV-macOS.zip"
+
+      - name: Clean up keychain
+        if: always() && steps.signing.outputs.enabled == 'true'
+        run: |
+          security delete-keychain "$KEYCHAIN_PATH" || true
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
@@ -269,4 +349,4 @@ jobs:
             
             ### Notes
             - iOS build is unsigned and requires sideloading via AltStore, Sideloadly, or similar tools
-            - macOS build is unsigned - you may need to right-click → Open to bypass Gatekeeper
+            - macOS build is signed with Developer ID and notarized when CI secrets are configured; otherwise it is unsigned and you may need to right-click → Open to bypass Gatekeeper

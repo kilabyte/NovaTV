@@ -151,56 +151,75 @@ jobs:
         working-directory: macos
         run: pod install --repo-update
 
+      # Signing + notarization uses the same secret names as other kilabyte
+      # repos (e.g. mcp-manager) so values can be copied across repos verbatim:
+      #   BUILD_CERTIFICATE_BASE64   base64-encoded Developer ID Application .p12
+      #   BUILD_CERTIFICATE_PASSWORD .p12 export password
+      #   ASC_API_KEY_B64            base64-encoded App Store Connect .p8 API key
+      #   ASC_KEY_ID                 App Store Connect key ID
+      #   ASC_ISSUER_ID              App Store Connect issuer UUID
+      # If any are missing, the build falls back to unsigned.
       - name: Determine signing capability
         id: signing
         env:
-          CERT: ${{ secrets.MACOS_CERTIFICATE }}
-          NOTARY_USER: ${{ secrets.MACOS_NOTARY_USER }}
-          CODESIGN_ID: ${{ secrets.MACOS_CODESIGN_ID }}
+          CERT: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          ASC_KEY: ${{ secrets.ASC_API_KEY_B64 }}
         run: |
-          if [ -n "$CERT" ] && [ -n "$NOTARY_USER" ] && [ -n "$CODESIGN_ID" ]; then
+          if [ -n "$CERT" ] && [ -n "$ASC_KEY" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
             echo "Signing + notarization enabled."
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Signing secrets missing; building unsigned macOS app (set MACOS_CERTIFICATE, MACOS_CERTIFICATE_PWD, MACOS_CODESIGN_ID, MACOS_NOTARY_USER, MACOS_NOTARY_PWD, MACOS_TEAM_ID to enable)."
+            echo "::warning::Signing secrets missing; building unsigned macOS app (set BUILD_CERTIFICATE_BASE64, BUILD_CERTIFICATE_PASSWORD, ASC_API_KEY_B64, ASC_KEY_ID, ASC_ISSUER_ID to enable)."
           fi
 
       - name: Import Developer ID certificate
         if: steps.signing.outputs.enabled == 'true'
         env:
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.BUILD_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}-signing
         run: |
-          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
-          KEYCHAIN_PWD=$(openssl rand -base64 32)
-          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+          CERT_PATH="$RUNNER_TEMP/build_certificate.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+
+          echo "$BUILD_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
-
-          CERT_PATH="$RUNNER_TEMP/cert.p12"
-          echo -n "$MACOS_CERTIFICATE" | base64 --decode > "$CERT_PATH"
-          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" "$HOME/Library/Keychains/login.keychain-db"
           rm "$CERT_PATH"
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
 
-          # Prepend our keychain to the search list so codesign can find the identity.
-          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/[\"[:space:]]//g')
-          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Install App Store Connect API key
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          ASC_API_KEY_B64: ${{ secrets.ASC_API_KEY_B64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$ASC_API_KEY_B64" | base64 --decode \
+            > ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
 
       - name: Build macOS (signed)
         if: steps.signing.outputs.enabled == 'true'
-        env:
-          CODESIGN_ID: ${{ secrets.MACOS_CODESIGN_ID }}
         run: |
+          SIGNING_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+            | grep "Developer ID Application" | head -1 | awk -F '"' '{print $2}')
+          echo "Using signing identity: $SIGNING_IDENTITY"
+
           flutter build macos --release --config-only
           xcodebuild -workspace macos/Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
             -derivedDataPath build/macos \
             CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="$CODESIGN_ID" \
+            CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
             OTHER_CODE_SIGN_FLAGS="--timestamp --options=runtime" \
             ARCHS="x86_64 arm64"
 
@@ -220,9 +239,8 @@ jobs:
       - name: Notarize and staple
         if: steps.signing.outputs.enabled == 'true'
         env:
-          NOTARY_USER: ${{ secrets.MACOS_NOTARY_USER }}
-          NOTARY_PWD: ${{ secrets.MACOS_NOTARY_PWD }}
-          TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
           APP_PATH="build/macos/Build/Products/Release/NovaTV.app"
           ZIP_PATH="$RUNNER_TEMP/NovaTV-notarize.zip"
@@ -231,12 +249,13 @@ jobs:
           ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
 
           xcrun notarytool submit "$ZIP_PATH" \
-            --apple-id "$NOTARY_USER" \
-            --password "$NOTARY_PWD" \
-            --team-id "$TEAM_ID" \
+            --key ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8 \
+            --key-id "$ASC_KEY_ID" \
+            --issuer "$ASC_ISSUER_ID" \
             --wait
 
           xcrun stapler staple "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
           spctl --assess --verbose --type execute "$APP_PATH"
 
       - name: Create zip
@@ -248,7 +267,7 @@ jobs:
       - name: Clean up keychain
         if: always() && steps.signing.outputs.enabled == 'true'
         run: |
-          security delete-keychain "$KEYCHAIN_PATH" || true
+          security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4

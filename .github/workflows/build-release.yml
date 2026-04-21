@@ -211,24 +211,61 @@ jobs:
         run: |
           SIGNING_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
             | grep "Developer ID Application" | head -1 | awk -F '"' '{print $2}')
+          echo "SIGNING_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_ENV"
           echo "Using signing identity: $SIGNING_IDENTITY"
 
           flutter build macos --release --config-only
-          # CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO prevents Xcode from auto-adding
-          # com.apple.security.get-task-allow, which Apple's notary service rejects
-          # for Developer ID-signed distribution builds. The explicit sdk-scoped
-          # identity override prevents the Release config's default "Apple
-          # Development" fallback from leaking in.
           xcodebuild -workspace macos/Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
             -derivedDataPath build/macos \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
-            "CODE_SIGN_IDENTITY[sdk=macosx*]=$SIGNING_IDENTITY" \
             CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
             OTHER_CODE_SIGN_FLAGS="--timestamp --options=runtime" \
             ARCHS="x86_64 arm64"
+
+      # Xcode can inject com.apple.security.get-task-allow into the main
+      # executable when building Release via Developer ID (the Release config
+      # still carries Apple Development defaults from the Flutter template).
+      # Apple's notary rejects that. Re-sign the app bundle from the inside
+      # out with the explicit Release.entitlements, which doesn't request
+      # get-task-allow, to guarantee a clean hardened-runtime signature.
+      - name: Re-sign for distribution
+        if: steps.signing.outputs.enabled == 'true'
+        run: |
+          APP_PATH="build/macos/Build/Products/Release/NovaTV.app"
+          ENTITLEMENTS="macos/Runner/Release.entitlements"
+
+          # Sign frameworks (no entitlements)
+          find "$APP_PATH/Contents/Frameworks" -maxdepth 1 -name "*.framework" -print0 | \
+            xargs -0 -I {} codesign --force --sign "$SIGNING_IDENTITY" \
+              --options runtime --timestamp "{}"
+
+          # Sign helper executables if any
+          if [ -d "$APP_PATH/Contents/MacOS" ]; then
+            find "$APP_PATH/Contents/MacOS" -type f -perm +111 ! -name "NovaTV" -print0 | \
+              xargs -0 -I {} codesign --force --sign "$SIGNING_IDENTITY" \
+                --options runtime --timestamp "{}" || true
+          fi
+
+          # Re-sign the main executable with explicit entitlements
+          codesign --force --sign "$SIGNING_IDENTITY" \
+            --entitlements "$ENTITLEMENTS" \
+            --options runtime --timestamp \
+            "$APP_PATH/Contents/MacOS/NovaTV"
+
+          # Re-sign the app bundle itself with the same entitlements
+          codesign --force --sign "$SIGNING_IDENTITY" \
+            --entitlements "$ENTITLEMENTS" \
+            --options runtime --timestamp \
+            "$APP_PATH"
+
+          # Verify the bundle has no get-task-allow
+          echo "--- entitlements of main executable ---"
+          codesign -d --entitlements :- "$APP_PATH/Contents/MacOS/NovaTV" || true
+          echo "--- verify bundle ---"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
       - name: Build macOS (unsigned fallback)
         if: steps.signing.outputs.enabled != 'true'

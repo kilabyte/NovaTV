@@ -214,12 +214,19 @@ jobs:
           echo "Using signing identity: $SIGNING_IDENTITY"
 
           flutter build macos --release --config-only
+          # CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO prevents Xcode from auto-adding
+          # com.apple.security.get-task-allow, which Apple's notary service rejects
+          # for Developer ID-signed distribution builds. The explicit sdk-scoped
+          # identity override prevents the Release config's default "Apple
+          # Development" fallback from leaking in.
           xcodebuild -workspace macos/Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
             -derivedDataPath build/macos \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
+            "CODE_SIGN_IDENTITY[sdk=macosx*]=$SIGNING_IDENTITY" \
+            CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
             OTHER_CODE_SIGN_FLAGS="--timestamp --options=runtime" \
             ARCHS="x86_64 arm64"
 

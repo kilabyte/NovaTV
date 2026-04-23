@@ -176,6 +176,17 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                               isPrimary: true,
                             ),
                             const SizedBox(height: 4),
+                            // Mute / unmute
+                            _MiniPlayerButton(
+                              icon: (playerState.isMuted || playerState.volume == 0)
+                                  ? Icons.volume_off_rounded
+                                  : Icons.volume_up_rounded,
+                              onTap: () {
+                                ref.read(playerProvider.notifier).toggleMute();
+                              },
+                              tooltip: playerState.isMuted ? 'Unmute' : 'Mute',
+                            ),
+                            const SizedBox(height: 4),
                             // Close
                             _MiniPlayerButton(
                               icon: Icons.close_rounded,

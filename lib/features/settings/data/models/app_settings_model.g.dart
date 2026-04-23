@@ -34,13 +34,15 @@ class AppSettingsModelAdapter extends TypeAdapter<AppSettingsModel> {
       lastTvGuideCategory: fields[12] as String?,
       lastSelectedSidebarRoute: fields[13] as String?,
       groupsSectionExpanded: fields[14] == null ? true : fields[14] as bool,
+      playerVolume: fields[15] == null ? 1.0 : (fields[15] as num).toDouble(),
+      playerMuted: fields[16] == null ? false : fields[16] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, AppSettingsModel obj) {
     writer
-      ..writeByte(15)
+      ..writeByte(17)
       ..writeByte(0)
       ..write(obj.themeMode)
       ..writeByte(1)
@@ -70,7 +72,11 @@ class AppSettingsModelAdapter extends TypeAdapter<AppSettingsModel> {
       ..writeByte(13)
       ..write(obj.lastSelectedSidebarRoute)
       ..writeByte(14)
-      ..write(obj.groupsSectionExpanded);
+      ..write(obj.groupsSectionExpanded)
+      ..writeByte(15)
+      ..write(obj.playerVolume)
+      ..writeByte(16)
+      ..write(obj.playerMuted);
   }
 
   @override

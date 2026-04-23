@@ -33,6 +33,13 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Never commit IPTV provider config / secrets
+web/env.js
+*.env
+.env
+.env.*
+!.env.example
+
 # Symbolication related
 app.*.symbols
 

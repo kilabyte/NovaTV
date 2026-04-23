@@ -32,6 +32,15 @@
 	<string>public.app-category.video</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!--
+		Nova TV is an IPTV player that streams user-supplied M3U playlists.
+		Stream URLs are entered by the end user and can use any protocol
+		scheme (plain HTTP is common for IPTV providers). There is no way to
+		enumerate acceptable domains in advance, so a blanket
+		NSAllowsArbitraryLoads is required. NSAllowsArbitraryLoadsInMedia
+		is not a viable alternative because media_kit uses libmpv/FFmpeg
+		rather than AVFoundation.
+	-->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

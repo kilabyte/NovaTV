@@ -179,19 +179,40 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final errorMessage = playerState.errorMessage;
 
     return PopScope(
-      // Handle Android back button - allow going back even when there's an error
       canPop: true,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) {
-          // Clear error state when popping
-          ref.read(playerProvider.notifier).minimize();
+          final notifier = ref.read(playerProvider.notifier);
+          // If we're popping with an active error, actually stop the player —
+          // minimizing would leave a broken mini-player on the home screens.
+          if (errorMessage != null) {
+            notifier.stop();
+          } else {
+            notifier.minimize();
+          }
         }
       },
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        // Wrap the entire body in MouseRegion to track mouse position consistently
-        // This prevents the controls overlay from interfering with hover detection
-        body: MouseRegion(
+      child: CallbackShortcuts(
+        bindings: <ShortcutActivator, VoidCallback>{
+          const SingleActivator(LogicalKeyboardKey.space):
+              () => ref.read(playerProvider.notifier).togglePlayPause(),
+          const SingleActivator(LogicalKeyboardKey.keyK):
+              () => ref.read(playerProvider.notifier).togglePlayPause(),
+          const SingleActivator(LogicalKeyboardKey.keyF):
+              () => _toggleControls(),
+          const SingleActivator(LogicalKeyboardKey.escape):
+              () => _minimizePlayer(),
+          const SingleActivator(LogicalKeyboardKey.keyM):
+              () => ref.read(favoriteNotifierProvider.notifier).toggleFavorite(channel?.id ?? ''),
+        },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            backgroundColor: Colors.black,
+            // Wrap the entire body in MouseRegion to track mouse position
+            // consistently so the controls overlay doesn't interfere with
+            // hover detection.
+            body: MouseRegion(
         onEnter: _isDesktop ? (_) => _showControlsOnHover() : null,
         onExit: _isDesktop ? (_) => _hideControlsOnHoverExit() : null,
         child: Stack(
@@ -235,6 +256,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           ],
         ),
       ),
+          ),
+        ),
       ),
     );
   }
@@ -492,10 +515,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                   ? Icons.star_rounded
                   : Icons.star_outline_rounded,
               iconColor: isFavorite ? AppColors.favorite : null,
+              semanticLabel: isFavorite ? 'Remove from favorites' : 'Add to favorites',
               onTap: _toggleFavorite,
             ),
             _ControlIconButton(
               icon: Icons.more_vert_rounded,
+              semanticLabel: 'More options',
               onTap: _showOptionsSheet,
             ),
             _CloseButton(onTap: _closePlayer),
@@ -994,11 +1019,13 @@ class _ControlIconButton extends StatefulWidget {
   final IconData icon;
   final VoidCallback onTap;
   final Color? iconColor;
+  final String? semanticLabel;
 
   const _ControlIconButton({
     required this.icon,
     required this.onTap,
     this.iconColor,
+    this.semanticLabel,
   });
 
   @override
@@ -1010,22 +1037,26 @@ class _ControlIconButtonState extends State<_ControlIconButton> {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: _isHovered ? Colors.white.withValues(alpha: 0.1) : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(
-            widget.icon,
-            color: widget.iconColor ?? Colors.white,
-            size: 24,
+    return Semantics(
+      button: true,
+      label: widget.semanticLabel,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: _isHovered ? Colors.white.withValues(alpha: 0.1) : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              widget.icon,
+              color: widget.iconColor ?? Colors.white,
+              size: 24,
+            ),
           ),
         ),
       ),

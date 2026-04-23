@@ -47,6 +47,12 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!--
+		IPTV stream URLs are user-supplied and can use plain HTTP. We can't
+		enumerate acceptable domains; blanket NSAllowsArbitraryLoads is
+		required. NSAllowsArbitraryLoadsInMedia would also work for
+		AVFoundation-backed playback only, which is not what media_kit uses.
+	-->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

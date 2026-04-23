@@ -261,26 +261,34 @@ class _MiniPlayerButtonState extends State<_MiniPlayerButton> {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Tooltip(
-          message: widget.tooltip,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: widget.isPrimary
-                  ? AppColors.primary
-                  : _isHovered
-                  ? AppColors.surfaceHover
-                  : AppColors.surfaceElevated,
-              borderRadius: BorderRadius.circular(8),
+    return Semantics(
+      button: true,
+      label: widget.tooltip,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          // Keep a reasonable tap target: mini-player buttons are 32x32
+          // with padding but sit in a small overlay, so we also expand the
+          // hit region for accessibility.
+          behavior: HitTestBehavior.opaque,
+          child: Tooltip(
+            message: widget.tooltip,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: widget.isPrimary
+                    ? AppColors.primary
+                    : _isHovered
+                    ? AppColors.surfaceHover
+                    : AppColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(widget.icon, color: widget.isPrimary ? Colors.black : AppColors.textPrimary, size: 18),
             ),
-            child: Icon(widget.icon, color: widget.isPrimary ? Colors.black : AppColors.textPrimary, size: 18),
           ),
         ),
       ),

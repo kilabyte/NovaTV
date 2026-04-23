@@ -784,7 +784,7 @@ class _AboutTileState extends State<_AboutTile> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Nova TV',
+                'Nova IPTV',
                 style: TextStyle(color: AppColors.textPrimary, fontSize: 17, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 2),

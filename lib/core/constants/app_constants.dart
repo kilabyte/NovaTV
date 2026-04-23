@@ -2,8 +2,10 @@
 class AppConstants {
   AppConstants._();
 
-  /// App name
-  static const String appName = 'Nova TV';
+  /// App name shown in dialogs, settings headers, window titles, etc.
+  /// Must match the App Store Connect display name ("Nova IPTV") so the
+  /// in-app branding matches what TestFlight / the App Store shows users.
+  static const String appName = 'Nova IPTV';
 
   /// App version
   static const String appVersion = '1.0.2';

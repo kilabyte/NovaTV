@@ -52,7 +52,7 @@ class WindowService with WindowListener {
 
       // Set up window options
       await windowManager.setMinimumSize(const Size(_minWidth, _minHeight));
-      await windowManager.setTitle('Nova TV');
+      await windowManager.setTitle('Nova IPTV');
 
       // Add listener for window changes
       windowManager.addListener(this);

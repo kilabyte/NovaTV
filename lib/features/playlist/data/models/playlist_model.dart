@@ -94,7 +94,10 @@ class PlaylistModel extends HiveObject {
     );
   }
 
-  /// Create copy with new values
+  /// Create copy with new values.
+  /// Pass `clearLastError: true` to explicitly clear the error; the default
+  /// `??` coalesce makes it impossible to set it to null with a plain
+  /// `copyWith(lastError: null)`.
   PlaylistModel copyWith({
     String? id,
     String? name,
@@ -105,6 +108,7 @@ class PlaylistModel extends HiveObject {
     bool? autoRefresh,
     int? refreshIntervalHours,
     String? lastError,
+    bool clearLastError = false,
     DateTime? createdAt,
     String? userAgent,
     Map<String, String>? headers,
@@ -118,7 +122,7 @@ class PlaylistModel extends HiveObject {
       channelCount: channelCount ?? this.channelCount,
       autoRefresh: autoRefresh ?? this.autoRefresh,
       refreshIntervalHours: refreshIntervalHours ?? this.refreshIntervalHours,
-      lastError: lastError ?? this.lastError,
+      lastError: clearLastError ? null : (lastError ?? this.lastError),
       createdAt: createdAt ?? this.createdAt,
       userAgent: userAgent ?? this.userAgent,
       headers: headers ?? this.headers,

@@ -159,8 +159,13 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
         return c;
       }).toList();
 
-      // Update playlist
-      final updatedModel = existingModel.copyWith(lastRefreshed: DateTime.now(), channelCount: channels.length, lastError: null);
+      // Update playlist (clearLastError explicitly resets the error field —
+      // lastError: null alone is a no-op because of the ?? coalesce).
+      final updatedModel = existingModel.copyWith(
+        lastRefreshed: DateTime.now(),
+        channelCount: channels.length,
+        clearLastError: true,
+      );
 
       // Save updated playlist and channels
       await _localDataSource.savePlaylist(updatedModel);

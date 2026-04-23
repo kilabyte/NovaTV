@@ -115,8 +115,10 @@ class IndexService {
       // Build group index
       await HiveIndexHelper.buildIndex<ChannelModel>(baseBoxName: _channelsBoxName, fieldName: 'group', getFieldValue: (c) => c.group ?? '', getKey: (c) => c.id);
 
-      // Build isFavorite index
-      await HiveIndexHelper.buildIndex<ChannelModel>(baseBoxName: _channelsBoxName, fieldName: 'isFavorite', getFieldValue: (c) => c.isFavorite ? 'true' : 'false', getKey: (c) => c.id);
+      // Build isFavorite index. Return '' for non-favorites so buildIndex's
+      // skip-empty branch keeps the index sparse; this matches the convention
+      // used by PlaylistLocalDataSourceImpl._rebuildChannelIndexes.
+      await HiveIndexHelper.buildIndex<ChannelModel>(baseBoxName: _channelsBoxName, fieldName: 'isFavorite', getFieldValue: (c) => c.isFavorite ? 'true' : '', getKey: (c) => c.id);
 
       AppLogger.debug('Channel indexes built successfully');
     } catch (e) {

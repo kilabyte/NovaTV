@@ -14,6 +14,14 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
+	<!--
+		The .app bundle folder stays NovaTV.app (PRODUCT_NAME) so CI paths
+		and existing installed users' Dock entries don't break. The
+		user-visible name everywhere else (Finder, About box, menu bar) is
+		set here to match the App Store Connect app name "Nova IPTV".
+	-->
+	<key>CFBundleDisplayName</key>
+	<string>Nova IPTV</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -33,7 +41,7 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<!--
-		Nova TV is an IPTV player that streams user-supplied M3U playlists.
+		Nova IPTV is an IPTV player that streams user-supplied M3U playlists.
 		Stream URLs are entered by the end user and can use any protocol
 		scheme (plain HTTP is common for IPTV providers). There is no way to
 		enumerate acceptable domains in advance, so a blanket

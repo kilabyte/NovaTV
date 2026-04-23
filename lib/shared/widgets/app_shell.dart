@@ -274,7 +274,7 @@ class _SidebarHeader extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           const Text(
-            'Nova TV',
+            'Nova IPTV',
             style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600, letterSpacing: -0.3),
           ),
         ],

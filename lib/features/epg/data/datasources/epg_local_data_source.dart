@@ -313,7 +313,10 @@ _IndexResult _computeProgramIndexes(List<_IndexTuple> tuples) {
   final channelIdIndex = <String, List<dynamic>>{};
   final dateIndex = <String, List<dynamic>>{};
   for (final t in tuples) {
-    channelIdIndex.putIfAbsent(t.channelId, () => <dynamic>[]).add(t.id);
+    // HiveIndexHelper.getIndexedKeys lowercases the lookup key on read, so we
+    // must store under the lowercased variant too; otherwise mixed-case
+    // tvg-ids (e.g. "BBC.One") silently miss the index.
+    channelIdIndex.putIfAbsent(t.channelId.toLowerCase(), () => <dynamic>[]).add(t.id);
     final dateKey = '${t.year}${t.month.toString().padLeft(2, '0')}${t.day.toString().padLeft(2, '0')}';
     dateIndex.putIfAbsent(dateKey, () => <dynamic>[]).add(t.id);
   }

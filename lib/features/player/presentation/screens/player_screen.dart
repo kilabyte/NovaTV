@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -33,6 +34,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   late final Animation<double> _controlsAnimation;
 
   bool _showControls = true;
+
+  /// Tracks the pending controls-hide callback so we can cancel it on the
+  /// next tap/hover instead of stacking overlapping callbacks.
+  Timer? _controlsHideTimer;
 
   @override
   void initState() {
@@ -75,7 +80,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   void _startControlsTimer() {
-    Future.delayed(const Duration(seconds: 5), () {
+    _controlsHideTimer?.cancel();
+    _controlsHideTimer = Timer(const Duration(seconds: 5), () {
       // Don't hide controls if mouse is still inside the player area (desktop)
       if (mounted && _showControls && !_isMouseInside) {
         _hideControls();
@@ -159,6 +165,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       DeviceOrientation.landscapeRight,
     ]);
 
+    _controlsHideTimer?.cancel();
     _controlsAnimationController.dispose();
     super.dispose();
   }

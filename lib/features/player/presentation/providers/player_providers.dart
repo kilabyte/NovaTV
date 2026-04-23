@@ -251,6 +251,10 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       await sub.cancel();
     }
     _subscriptions.clear();
+    // Stop the health timer too — no point polling when there's no player.
+    _healthTimer?.cancel();
+    _healthTimer = null;
+    _bufferingEvents.clear();
     await state.player?.dispose();
     if (mounted) {
       state = const PlayerState();
@@ -275,27 +279,42 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     await playChannel(prev);
   }
 
+  /// Cap the per-URL MIME cache to avoid unbounded growth in long-lived
+  /// sessions that touch thousands of distinct URLs.
+  static const int _urlMimeCacheMax = 500;
+
   /// Try opening a URL; if it fails, retry with common extensions. Remembers
   /// the winning variant per URL so subsequent opens skip the retry.
-  /// This costs at most one extra round-trip on the first play of a stream
-  /// whose extension doesn't match its actual container.
+  /// If the cached variant itself starts failing (server migration, etc.),
+  /// the cache entry is dropped and the fallback chain is re-entered.
   Future<void> _openWithMimeFallback(Player player, String url, Map<String, String> headers) async {
     final cached = _urlMimeCache[url];
+
     final candidates = <String>[
-      cached ?? url,
-      if (cached == null && !url.contains('.m3u8')) '$url.m3u8',
-      if (cached == null && !url.contains('.mpd')) '$url.mpd',
+      if (cached != null) cached,
+      // Always try the raw URL and common extensions in case the cached
+      // variant has gone bad.
+      if (cached != url) url,
+      if (!url.contains('.m3u8')) '$url.m3u8',
+      if (!url.contains('.mpd')) '$url.mpd',
     ];
 
     Object? lastError;
     for (final candidate in candidates) {
       try {
         await player.open(Media(candidate, httpHeaders: headers.isNotEmpty ? headers : null));
+        // Simple FIFO eviction when the cache is full.
+        if (_urlMimeCache.length >= _urlMimeCacheMax) {
+          _urlMimeCache.remove(_urlMimeCache.keys.first);
+        }
         _urlMimeCache[url] = candidate;
         return;
       } catch (e) {
         lastError = e;
         AppLogger.debug('MIME fallback: $candidate failed ($e), trying next');
+        // The cached variant is stale — drop it so the next call to this
+        // method won't loop through the same failing entry first.
+        if (candidate == cached) _urlMimeCache.remove(url);
       }
     }
     if (lastError != null) throw lastError;

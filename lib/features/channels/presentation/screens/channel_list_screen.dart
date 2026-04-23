@@ -139,7 +139,12 @@ class _ChannelRowState extends ConsumerState<_ChannelRow> {
 
   @override
   Widget build(BuildContext context) {
-    final programAsync = ref.watch(currentProgramProvider((playlistId: widget.playlistId, channelId: widget.channel.tvgId ?? widget.channel.id)));
+    // Use the batched current-programs provider so every row in a long list
+    // shares a single Hive fetch per playlist/minute instead of each one
+    // hitting the repo.
+    final epgId = (widget.channel.tvgId ?? widget.channel.id).toLowerCase();
+    final programAsync = ref.watch(currentProgramsProvider(widget.playlistId))
+        .whenData((map) => map[epgId]);
 
     final isFavorite = ref.watch(isFavoriteProvider(widget.channel.id)).valueOrNull ?? false;
 

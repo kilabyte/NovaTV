@@ -68,11 +68,19 @@ final programsInRangeAllPlaylistsProvider =
   final playlists = await ref.watch(playlistsProvider.future);
   if (playlists.isEmpty) return const <Program>[];
   final repo = ref.read(epgRepositoryProvider);
+
+  // Parallel-fan-out: with 2+ playlists serial waits add up. Hive reads are
+  // I/O-light but each call may hit a different on-disk box; `Future.wait`
+  // gives us overlap without touching the repo internals.
+  final perPlaylist = await Future.wait(playlists.map(
+    (p) => repo.getProgramsInRange(p.id, params.start, params.end),
+  ));
+
   final results = <Program>[];
-  for (final p in playlists) {
-    final r = await repo.getProgramsInRange(p.id, params.start, params.end);
-    r.fold(
-      (failure) => AppLogger.warning('programsInRange for ${p.id} failed: ${failure.message}'),
+  for (var i = 0; i < perPlaylist.length; i++) {
+    perPlaylist[i].fold(
+      (failure) => AppLogger.warning(
+          'programsInRange for ${playlists[i].id} failed: ${failure.message}'),
       (list) => results.addAll(list),
     );
   }

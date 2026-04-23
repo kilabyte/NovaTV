@@ -57,6 +57,11 @@ class IndexService {
             AppLogger.debug('Channel favorite index missing, will rebuild');
             needsRebuild = true;
           }
+          // Check if playlistId index exists
+          if (!await HiveIndexHelper.indexExists(baseBoxName: _channelsBoxName, fieldName: 'playlistId')) {
+            AppLogger.debug('Channel playlistId index missing, will rebuild');
+            needsRebuild = true;
+          }
         }
       }
 
@@ -113,7 +118,8 @@ class IndexService {
 
       final groupExists = await HiveIndexHelper.indexExists(baseBoxName: _channelsBoxName, fieldName: 'group');
       final favExists = await HiveIndexHelper.indexExists(baseBoxName: _channelsBoxName, fieldName: 'isFavorite');
-      if (groupExists && favExists) {
+      final playlistIdExists = await HiveIndexHelper.indexExists(baseBoxName: _channelsBoxName, fieldName: 'playlistId');
+      if (groupExists && favExists && playlistIdExists) {
         AppLogger.debug('Channel indexes already exist, skipping rebuild');
         return;
       }
@@ -128,6 +134,12 @@ class IndexService {
         // Return '' for non-favorites so buildIndex's skip-empty branch keeps
         // the index sparse; matches PlaylistLocalDataSourceImpl's convention.
         await HiveIndexHelper.buildIndex<ChannelModel>(baseBoxName: _channelsBoxName, fieldName: 'isFavorite', getFieldValue: (c) => c.isFavorite ? 'true' : '', getKey: (c) => c.id);
+      }
+
+      if (!playlistIdExists) {
+        // Warm the playlistId index on first cold launch so
+        // getChannels(playlistId) is O(1) without waiting for the next save.
+        await HiveIndexHelper.buildIndex<ChannelModel>(baseBoxName: _channelsBoxName, fieldName: 'playlistId', getFieldValue: (c) => c.playlistId, getKey: (c) => c.id);
       }
 
       AppLogger.debug('Channel indexes built successfully');

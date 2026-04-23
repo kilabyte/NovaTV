@@ -367,10 +367,12 @@ class _ChannelCurrentProgram extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final programAsync = ref.watch(currentProgramProvider((playlistId: channel.playlistId, channelId: channel.epgId)));
+    // Batched: one Hive fetch per playlist/minute instead of one per card.
+    final programsAsync = ref.watch(currentProgramsProvider(channel.playlistId));
 
-    return programAsync.when(
-      data: (program) {
+    return programsAsync.when(
+      data: (byChannelId) {
+        final program = byChannelId[channel.epgId.toLowerCase()];
         if (program == null) return const SizedBox.shrink();
         return Padding(
           padding: const EdgeInsets.only(top: 4),

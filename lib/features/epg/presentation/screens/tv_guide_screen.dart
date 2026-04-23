@@ -876,8 +876,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     }
 
     final children = <Widget>[];
-    var currentTime = gridStart;
-    var currentPosition = 0.0;
+    var lastEnd = gridStart;
 
     void addIfVisible(double left, double width, Widget Function() builder) {
       final right = left + width;
@@ -891,44 +890,50 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       ));
     }
 
+    // Absolute-position each program at its actual start time. This is
+    // robust to overlapping / out-of-order EPG: the previous sequential
+    // accumulator would drift rightward whenever a later program started
+    // before the previous one ended.
     for (final program in visiblePrograms) {
-      if (program.start.isAfter(currentTime)) {
-        final gapWidth = _durationToWidth(program.start.difference(currentTime));
+      // Gap before the program if it starts after the previous one ended.
+      if (program.start.isAfter(lastEnd)) {
+        final gapLeft = _durationToWidth(lastEnd.difference(gridStart));
+        final gapWidth = _durationToWidth(program.start.difference(lastEnd));
         if (gapWidth > 0) {
-          final gapLeft = currentPosition;
           addIfVisible(gapLeft, gapWidth, () => _buildGap(gapWidth));
-          currentPosition += gapWidth;
         }
       }
 
       final displayStart = program.start.isBefore(gridStart) ? gridStart : program.start;
       final displayEnd = program.end.isAfter(gridEnd) ? gridEnd : program.end;
       final cellWidth = _durationToWidth(displayEnd.difference(displayStart));
+      if (cellWidth <= 0) continue;
 
-      if (cellWidth > 0) {
-        final cellLeft = currentPosition;
-        final hiddenLeftWidth = program.start.isBefore(gridStart)
-            ? _durationToWidth(gridStart.difference(program.start))
-            : 0.0;
-        addIfVisible(cellLeft, cellWidth, () => _ProgramCell(
-              program: program,
-              width: cellWidth,
-              height: _rowHeight,
-              onTap: () => _showProgramDetails(context, program, channel),
-              programStartOffset: cellLeft,
-              hiddenLeftWidth: hiddenLeftWidth,
-              scrollOffset: _currentScrollOffset,
-            ));
-        currentPosition += cellWidth;
-      }
+      final cellLeft = _durationToWidth(displayStart.difference(gridStart));
+      final hiddenLeftWidth = program.start.isBefore(gridStart)
+          ? _durationToWidth(gridStart.difference(program.start))
+          : 0.0;
+      addIfVisible(cellLeft, cellWidth, () => _ProgramCell(
+            program: program,
+            width: cellWidth,
+            height: _rowHeight,
+            onTap: () => _showProgramDetails(context, program, channel),
+            programStartOffset: cellLeft,
+            hiddenLeftWidth: hiddenLeftWidth,
+            scrollOffset: _currentScrollOffset,
+          ));
 
-      currentTime = program.end;
+      // Track the furthest-right end so we don't double-paint gaps inside
+      // overlapping ranges.
+      if (program.end.isAfter(lastEnd)) lastEnd = program.end;
     }
 
-    if (currentTime.isBefore(gridEnd)) {
-      final gapWidth = _durationToWidth(gridEnd.difference(currentTime));
-      if (gapWidth > 0) {
-        addIfVisible(currentPosition, gapWidth, () => _buildGap(gapWidth));
+    // Trailing gap from the last program end to the end of the grid.
+    if (lastEnd.isBefore(gridEnd)) {
+      final trailingLeft = _durationToWidth(lastEnd.difference(gridStart));
+      final trailingWidth = _durationToWidth(gridEnd.difference(lastEnd));
+      if (trailingWidth > 0) {
+        addIfVisible(trailingLeft, trailingWidth, () => _buildGap(trailingWidth));
       }
     }
 

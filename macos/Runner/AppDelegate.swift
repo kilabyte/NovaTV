@@ -1,21 +1,19 @@
 import Cocoa
 import FlutterMacOS
+import MediaPlayer
 
 @main
 class AppDelegate: FlutterAppDelegate {
   /// Channel used to bridge native menu/media key events to Flutter.
   private var menuChannel: FlutterMethodChannel?
+  /// Channel for Now Playing + MPRemoteCommandCenter interactions.
+  private var nowPlayingChannel: FlutterMethodChannel?
 
   // Keep the app resident in the dock when the user closes the last window.
-  // Media players are expected to behave this way — closing the window should
-  // hide it, not terminate the process. Reopen via dock click is handled by
-  // applicationShouldHandleReopen below.
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     return false
   }
 
-  // When the user clicks the dock icon (or uses Finder "Open") after closing
-  // the window, re-show the Flutter window instead of creating a new instance.
   override func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
     if !flag {
       for window in sender.windows where window is MainFlutterWindow {
@@ -35,22 +33,25 @@ class AppDelegate: FlutterAppDelegate {
 
     super.applicationDidFinishLaunching(notification)
 
-    // Set up the menu bridge channel so the Flutter side can be notified when
-    // the user picks Preferences from the menu bar.
     if let controller = mainFlutterWindow?.contentViewController as? FlutterViewController {
       menuChannel = FlutterMethodChannel(
         name: "io.kilabyte.novatv/menu",
         binaryMessenger: controller.engine.binaryMessenger
       )
+
+      nowPlayingChannel = FlutterMethodChannel(
+        name: "io.kilabyte.novatv/nowplaying",
+        binaryMessenger: controller.engine.binaryMessenger
+      )
+      nowPlayingChannel?.setMethodCallHandler { [weak self] call, result in
+        self?.handleNowPlayingCall(call, result: result)
+      }
     }
 
     wirePreferencesMenuItem()
+    setupRemoteCommands()
   }
 
-  /// The Flutter macOS project template ships with a stock "Preferences…"
-  /// menu item that isn't connected to anything. Find it in the Main menu
-  /// and route its action to [openPreferences:] so it navigates to the
-  /// Flutter Settings route instead of silently doing nothing.
   private func wirePreferencesMenuItem() {
     guard let mainMenu = NSApp.mainMenu else { return }
     for menu in mainMenu.items.compactMap({ $0.submenu }) {
@@ -63,5 +64,60 @@ class AppDelegate: FlutterAppDelegate {
 
   @objc func openPreferences(_ sender: Any?) {
     menuChannel?.invokeMethod("openSettings", arguments: nil)
+  }
+
+  // MARK: - Now Playing / Media keys
+
+  /// Wire system media-key events (play/pause on keyboard and AirPods,
+  /// Control Center, Lock Screen) to the Flutter side.
+  private func setupRemoteCommands() {
+    let center = MPRemoteCommandCenter.shared()
+
+    center.playCommand.isEnabled = true
+    center.playCommand.addTarget { [weak self] _ in
+      self?.nowPlayingChannel?.invokeMethod("play", arguments: nil)
+      return .success
+    }
+
+    center.pauseCommand.isEnabled = true
+    center.pauseCommand.addTarget { [weak self] _ in
+      self?.nowPlayingChannel?.invokeMethod("pause", arguments: nil)
+      return .success
+    }
+
+    center.togglePlayPauseCommand.isEnabled = true
+    center.togglePlayPauseCommand.addTarget { [weak self] _ in
+      self?.nowPlayingChannel?.invokeMethod("togglePlayPause", arguments: nil)
+      return .success
+    }
+
+    center.stopCommand.isEnabled = true
+    center.stopCommand.addTarget { [weak self] _ in
+      self?.nowPlayingChannel?.invokeMethod("stop", arguments: nil)
+      return .success
+    }
+  }
+
+  /// Inbound messages from Flutter: update Now Playing info or clear it.
+  private func handleNowPlayingCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    switch call.method {
+    case "update":
+      let args = call.arguments as? [String: Any] ?? [:]
+      var info: [String: Any] = [:]
+      if let title = args["title"] as? String { info[MPMediaItemPropertyTitle] = title }
+      if let subtitle = args["subtitle"] as? String { info[MPMediaItemPropertyArtist] = subtitle }
+      if let isPlaying = args["isPlaying"] as? Bool {
+        info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+      }
+      MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+      MPNowPlayingInfoCenter.default().playbackState = (args["isPlaying"] as? Bool ?? true) ? .playing : .paused
+      result(nil)
+    case "clear":
+      MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+      MPNowPlayingInfoCenter.default().playbackState = .stopped
+      result(nil)
+    default:
+      result(FlutterMethodNotImplemented)
+    }
   }
 }

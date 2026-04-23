@@ -10,6 +10,10 @@ import '../../../../core/utils/app_logger.dart';
 import '../../../playlist/domain/entities/channel.dart';
 import '../../../playlist/presentation/providers/playlist_providers.dart' show playlistRepositoryProvider, recentlyWatchedNotifierProvider;
 
+/// Stream health indicator — aggregates recent buffering events into a
+/// green/yellow/red signal surfaced on the mini-player.
+enum StreamHealth { good, okay, poor }
+
 /// Global player state for mini-player support
 class PlayerState {
   final Channel? channel;
@@ -20,10 +24,48 @@ class PlayerState {
   final bool isMinimized;
   final String? errorMessage;
 
-  const PlayerState({this.channel, this.player, this.controller, this.isPlaying = false, this.isBuffering = false, this.isMinimized = false, this.errorMessage});
+  /// Channel most recently watched BEFORE the current one — exposed so the
+  /// UI (or the `L` keyboard shortcut) can jump back with one action.
+  final String? previousChannelId;
 
-  PlayerState copyWith({Channel? channel, Player? player, VideoController? controller, bool? isPlaying, bool? isBuffering, bool? isMinimized, String? errorMessage, bool clearError = false}) {
-    return PlayerState(channel: channel ?? this.channel, player: player ?? this.player, controller: controller ?? this.controller, isPlaying: isPlaying ?? this.isPlaying, isBuffering: isBuffering ?? this.isBuffering, isMinimized: isMinimized ?? this.isMinimized, errorMessage: clearError ? null : (errorMessage ?? this.errorMessage));
+  /// Rolling-window stream health score.
+  final StreamHealth health;
+
+  const PlayerState({
+    this.channel,
+    this.player,
+    this.controller,
+    this.isPlaying = false,
+    this.isBuffering = false,
+    this.isMinimized = false,
+    this.errorMessage,
+    this.previousChannelId,
+    this.health = StreamHealth.good,
+  });
+
+  PlayerState copyWith({
+    Channel? channel,
+    Player? player,
+    VideoController? controller,
+    bool? isPlaying,
+    bool? isBuffering,
+    bool? isMinimized,
+    String? errorMessage,
+    bool clearError = false,
+    String? previousChannelId,
+    StreamHealth? health,
+  }) {
+    return PlayerState(
+      channel: channel ?? this.channel,
+      player: player ?? this.player,
+      controller: controller ?? this.controller,
+      isPlaying: isPlaying ?? this.isPlaying,
+      isBuffering: isBuffering ?? this.isBuffering,
+      isMinimized: isMinimized ?? this.isMinimized,
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      previousChannelId: previousChannelId ?? this.previousChannelId,
+      health: health ?? this.health,
+    );
   }
 
   bool get hasActivePlayer => player != null && channel != null;
@@ -38,10 +80,24 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   /// player would clobber state for a new channel.
   final List<StreamSubscription<dynamic>> _subscriptions = [];
 
+  /// MIME-type hint for the next [playChannel] call. Used by the fallback
+  /// chain: if a stream fails to play as-is, we try appending .m3u8, then
+  /// .mpd, and record the winning extension so future opens skip retries.
+  final Map<String, String> _urlMimeCache = {};
+
+  /// Rolling timestamps of recent buffering events; we derive [StreamHealth]
+  /// from their frequency.
+  final List<DateTime> _bufferingEvents = [];
+  Timer? _healthTimer;
+
   PlayerNotifier(this._ref) : super(const PlayerState());
 
   /// Play a channel
   Future<void> playChannel(String channelId) async {
+    // Remember the currently-playing channel so the user can jump back with
+    // the last-channel toggle. We capture it BEFORE stop() clears state.
+    final previousChannelId = state.channel?.id;
+
     // Stop existing player if any
     await stop();
 
@@ -61,7 +117,16 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     // setProperty are fatal on those platforms.
     _applyMpvIptvTuning(player);
 
-    state = state.copyWith(player: player, controller: controller, isMinimized: false, clearError: true);
+    state = state.copyWith(
+      player: player,
+      controller: controller,
+      isMinimized: false,
+      clearError: true,
+      previousChannelId: previousChannelId,
+      health: StreamHealth.good,
+    );
+    _bufferingEvents.clear();
+    _ensureHealthTimer();
 
     // Set up listeners. Track subscriptions so stop() can cancel them before
     // disposing the player; without this, late events from a prior player can
@@ -73,8 +138,10 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     }));
 
     _subscriptions.add(player.stream.buffering.listen((buffering) {
-      if (mounted) {
-        state = state.copyWith(isBuffering: buffering);
+      if (!mounted) return;
+      state = state.copyWith(isBuffering: buffering);
+      if (buffering) {
+        _recordBufferingEvent();
       }
     }));
 
@@ -147,7 +214,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
             httpHeaders.addAll(channel.headers!);
           }
 
-          await player.open(Media(channel.url, httpHeaders: httpHeaders.isNotEmpty ? httpHeaders : null));
+          await _openWithMimeFallback(player, channel.url, httpHeaders);
         } catch (e) {
           if (mounted) {
             state = state.copyWith(errorMessage: 'Failed to start playback: ${e.toString()}');
@@ -200,6 +267,75 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     }
   }
 
+  /// Jump to the previously watched channel, if any. Remote-control style
+  /// single-key toggle; bound to `L` in the player screen's shortcuts.
+  Future<void> playPreviousChannel() async {
+    final prev = state.previousChannelId;
+    if (prev == null) return;
+    await playChannel(prev);
+  }
+
+  /// Try opening a URL; if it fails, retry with common extensions. Remembers
+  /// the winning variant per URL so subsequent opens skip the retry.
+  /// This costs at most one extra round-trip on the first play of a stream
+  /// whose extension doesn't match its actual container.
+  Future<void> _openWithMimeFallback(Player player, String url, Map<String, String> headers) async {
+    final cached = _urlMimeCache[url];
+    final candidates = <String>[
+      cached ?? url,
+      if (cached == null && !url.contains('.m3u8')) '$url.m3u8',
+      if (cached == null && !url.contains('.mpd')) '$url.mpd',
+    ];
+
+    Object? lastError;
+    for (final candidate in candidates) {
+      try {
+        await player.open(Media(candidate, httpHeaders: headers.isNotEmpty ? headers : null));
+        _urlMimeCache[url] = candidate;
+        return;
+      } catch (e) {
+        lastError = e;
+        AppLogger.debug('MIME fallback: $candidate failed ($e), trying next');
+      }
+    }
+    if (lastError != null) throw lastError;
+  }
+
+  /// Record a buffering event and recompute the rolling-window health score.
+  /// Window is the last 60 seconds; >5 events = poor, >2 = okay, else good.
+  void _recordBufferingEvent() {
+    final now = DateTime.now();
+    _bufferingEvents.add(now);
+    final cutoff = now.subtract(const Duration(seconds: 60));
+    _bufferingEvents.removeWhere((t) => t.isBefore(cutoff));
+    _updateHealth();
+  }
+
+  void _updateHealth() {
+    if (!mounted) return;
+    final count = _bufferingEvents.length;
+    final newHealth = count >= 5
+        ? StreamHealth.poor
+        : count >= 2
+            ? StreamHealth.okay
+            : StreamHealth.good;
+    if (newHealth != state.health) {
+      state = state.copyWith(health: newHealth);
+    }
+  }
+
+  /// Re-evaluate health every 15s so the indicator decays back to green when
+  /// the stream has stabilised, even if no new buffering events arrive.
+  void _ensureHealthTimer() {
+    _healthTimer?.cancel();
+    _healthTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      final now = DateTime.now();
+      final cutoff = now.subtract(const Duration(seconds: 60));
+      _bufferingEvents.removeWhere((t) => t.isBefore(cutoff));
+      _updateHealth();
+    });
+  }
+
   /// Silent reconnect: re-open the current channel's URL without tearing the
   /// player down. Used when the stream drifts past its live window or the
   /// server briefly drops the connection.
@@ -243,6 +379,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
   @override
   void dispose() {
+    _healthTimer?.cancel();
     for (final sub in _subscriptions) {
       sub.cancel();
     }

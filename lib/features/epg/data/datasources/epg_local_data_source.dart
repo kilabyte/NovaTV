@@ -102,9 +102,12 @@ class EpgLocalDataSourceImpl implements EpgLocalDataSource {
     }
 
     // Fallback: filter on model fields first, only hydrate entities we keep.
+    // Compare case-insensitively to match the indexed path (mixed-case tvg-ids
+    // like "BBC.One" vs "bbc.one" are the same channel).
+    final needle = channelId.toLowerCase();
     final models = <ProgramModel>[];
     for (final model in box.values) {
-      if (model.channelId == channelId) models.add(model);
+      if (model.channelId.toLowerCase() == needle) models.add(model);
     }
     models.sort((a, b) => a.start.compareTo(b.start));
     return models.map((m) => m.toEntity()).toList(growable: false);
@@ -177,8 +180,9 @@ class EpgLocalDataSourceImpl implements EpgLocalDataSource {
       }
       return null;
     }
+    final needle = channelId.toLowerCase();
     for (final m in box.values) {
-      if (m.channelId == channelId && m.start.isBefore(now) && m.end.isAfter(now)) {
+      if (m.channelId.toLowerCase() == needle && m.start.isBefore(now) && m.end.isAfter(now)) {
         return m.toEntity();
       }
     }

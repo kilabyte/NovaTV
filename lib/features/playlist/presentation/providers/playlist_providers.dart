@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce/hive.dart';
 
+import '../../../../core/storage/hive_storage.dart';
 import '../../data/datasources/playlist_local_data_source.dart';
 import '../../data/datasources/playlist_remote_data_source.dart';
 import '../../data/parsers/m3u_parser.dart';
@@ -153,21 +154,21 @@ final searchResultsProvider = FutureProvider.autoDispose<List<SearchResult>>((re
     final allChannelsResult = await playlistRepository.getAllChannels();
     final allChannels = allChannelsResult.fold((failure) => <Channel>[], (channels) => channels);
 
-    // Create a map of EPG channel ID to Channel for quick lookup
+    // Map EPG channel ID → Channel for quick lookup. Keys lowercased to match
+    // the normalization applied when programs are written to the index, so
+    // mixed-case tvg-ids don't silently miss.
     final channelByEpgId = <String, Channel>{};
     for (final channel in allChannels) {
-      channelByEpgId[channel.epgId] = channel;
+      channelByEpgId[channel.epgId.toLowerCase()] = channel;
     }
 
     for (final playlist in playlists) {
       final programs = await epgLocalDataSource.searchPrograms(playlist.id, query);
 
       for (final program in programs) {
-        // Find the channel for this program
-        final channel = channelByEpgId[program.channelId];
+        final channel = channelByEpgId[program.channelId.toLowerCase()];
         if (channel != null && !seenChannelIds.contains(channel.id)) {
           results.add(ProgramSearchResult(program: program, channel: channel));
-          // Only add first program match per channel to avoid duplicates
           seenChannelIds.add(channel.id);
         }
       }
@@ -360,10 +361,11 @@ class RecentlyWatchedNotifier extends StateNotifier<List<String>> {
     _loadFromHive();
   }
 
-  /// Load recently watched from Hive storage
+  /// Load recently watched from Hive storage via the shared safeOpenBox
+  /// helper, matching the rest of the codebase.
   Future<void> _loadFromHive() async {
     try {
-      _box = await _safeOpenBox(_boxName);
+      _box = await safeOpenBox<dynamic>(_boxName);
       final stored = _box?.get(_key);
       if (stored != null && stored is List) {
         state = List<String>.from(stored);
@@ -373,31 +375,6 @@ class RecentlyWatchedNotifier extends StateNotifier<List<String>> {
     } finally {
       if (!_ready.isCompleted) _ready.complete();
     }
-  }
-
-  /// Safely open a Hive box with retry logic
-  Future<Box> _safeOpenBox(String boxName) async {
-    const maxRetries = 3;
-    for (var attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        if (Hive.isBoxOpen(boxName)) {
-          return Hive.box(boxName);
-        }
-        return await Hive.openBox(boxName);
-      } catch (e) {
-        if (attempt < maxRetries - 1) {
-          await Future.delayed(Duration(milliseconds: 100 * (attempt + 1)));
-          if (Hive.isBoxOpen(boxName)) {
-            try {
-              await Hive.box(boxName).close();
-            } catch (_) {}
-          }
-        } else {
-          rethrow;
-        }
-      }
-    }
-    throw Exception('Failed to open box $boxName');
   }
 
   /// Save to Hive storage

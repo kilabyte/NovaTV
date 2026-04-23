@@ -171,8 +171,11 @@ class _FavoriteChannelTileState extends ConsumerState<_FavoriteChannelTile> {
 
   @override
   Widget build(BuildContext context) {
-    // Get current program if available
-    final currentProgram = ref.watch(currentProgramProvider((playlistId: widget.channel.playlistId, channelId: widget.channel.epgId)));
+    // Batched: favorites list can be long and all entries in the same
+    // playlist share a single fetch.
+    final currentProgram = ref
+        .watch(currentProgramsProvider(widget.channel.playlistId))
+        .whenData((map) => map[widget.channel.epgId.toLowerCase()]);
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),

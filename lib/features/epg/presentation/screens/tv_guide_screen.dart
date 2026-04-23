@@ -1187,8 +1187,7 @@ class _IconButtonState extends State<_IconButton> {
         message: widget.tooltip ?? '',
         child: GestureDetector(
           onTap: widget.onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
+          child: Container(
             padding: const EdgeInsets.all(10),
             margin: const EdgeInsets.symmetric(horizontal: 2),
             decoration: BoxDecoration(color: _isHovered ? AppColors.surfaceHover : Colors.transparent, borderRadius: BorderRadius.circular(8)),
@@ -1222,8 +1221,7 @@ class _DateChipState extends State<_DateChip> {
       onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+        child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             color: widget.isSelected
@@ -1275,8 +1273,7 @@ class _ChannelTileState extends State<_ChannelTile> {
       onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+        child: Container(
           height: widget.height,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(

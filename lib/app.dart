@@ -10,6 +10,7 @@ import 'config/router/app_router.dart';
 import 'config/router/routes.dart';
 import 'config/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
+import 'core/services/now_playing_service.dart';
 import 'core/storage/index_service.dart';
 import 'core/utils/app_logger.dart';
 import 'features/settings/presentation/providers/settings_providers.dart';
@@ -40,6 +41,9 @@ class _NovaAppState extends ConsumerState<NovaApp> with WidgetsBindingObserver {
     // Listen for Cmd+, from the macOS menu bar.
     if (!kIsWeb && Platform.isMacOS) {
       _menuChannel.setMethodCallHandler(_handleMenuCall);
+      // Start the Now Playing / media-keys bridge. It listens for player
+      // state changes and forwards them to MPNowPlayingInfoCenter.
+      ref.read(nowPlayingServiceProvider);
     }
   }
 

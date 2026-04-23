@@ -93,21 +93,21 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
 
   /// Refresh EPG data when TV Guide screen is opened, but only if the cached
   /// data is actually stale. Otherwise we'd double-refresh right after the
-  /// startup auto-refresh ran.
+  /// startup auto-refresh ran. Iterates every playlist — previously only the
+  /// first playlist's EPG was refreshed.
   void _refreshEpgOnOpen() {
     Future.microtask(() async {
       if (!mounted) return;
 
       try {
-        final playlists = ref.read(playlistNotifierProvider);
-        final playlist = playlists.valueOrNull?.firstOrNull;
-        if (playlist == null || playlist.epgUrl == null || playlist.epgUrl!.isEmpty) return;
-
-        // Skip if we have cached EPG data that's still valid.
-        final hasValid = await ref.read(hasValidEpgDataProvider(playlist.id).future);
-        if (!mounted || hasValid) return;
-
-        await ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist.id, playlist.epgUrl!);
+        final playlists = ref.read(playlistNotifierProvider).valueOrNull ?? const [];
+        for (final playlist in playlists) {
+          if (!mounted) return;
+          if (playlist.epgUrl == null || playlist.epgUrl!.isEmpty) continue;
+          final hasValid = await ref.read(hasValidEpgDataProvider(playlist.id).future);
+          if (hasValid) continue;
+          await ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist.id, playlist.epgUrl!);
+        }
       } catch (_) {
         // Background operation; user can manually refresh.
       }
@@ -479,11 +479,10 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
   }
 
   Widget _buildTvGuide(BuildContext context, List<Channel> channels, DateTime startTime) {
-    final playlists = ref.watch(playlistNotifierProvider);
-    final playlistId = playlists.valueOrNull?.firstOrNull?.id ?? '';
+    final playlists = ref.watch(playlistNotifierProvider).valueOrNull ?? const [];
 
-    // Early return if no playlist
-    if (playlistId.isEmpty) {
+    // Early return if no playlists at all
+    if (playlists.isEmpty) {
       return Column(
         children: [
           _buildTimeHeader(context, startTime),
@@ -507,9 +506,9 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       );
     }
 
-    // Use FutureProvider instead of FutureBuilder to cache and avoid rebuilds
+    // Merge EPG from every playlist so multi-playlist users see all programs.
     final endTime = startTime.add(Duration(hours: _totalHours));
-    final programsAsync = ref.watch(programsInRangeProvider((playlistId: playlistId, start: startTime, end: endTime)));
+    final programsAsync = ref.watch(programsInRangeAllPlaylistsProvider((start: startTime, end: endTime)));
 
     return programsAsync.when(
       data: (programs) {
@@ -1025,18 +1024,20 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
   }
 
   void _refreshEpg(BuildContext context) {
-    final playlists = ref.read(playlistNotifierProvider);
-    final playlist = playlists.valueOrNull?.firstOrNull;
+    final playlists = ref.read(playlistNotifierProvider).valueOrNull ?? const [];
+    final withEpg = playlists.where((p) => p.epgUrl != null && p.epgUrl!.isNotEmpty).toList();
 
-    if (playlist?.epgUrl != null) {
-      ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist!.id, playlist.epgUrl!);
+    if (withEpg.isNotEmpty) {
+      for (final playlist in withEpg) {
+        ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist.id, playlist.epgUrl!);
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
               SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary))),
               const SizedBox(width: 12),
-              const Text('Refreshing EPG data...'),
+              Text(withEpg.length == 1 ? 'Refreshing EPG data...' : 'Refreshing EPG for ${withEpg.length} playlists...'),
             ],
           ),
           backgroundColor: AppColors.surface,

@@ -204,6 +204,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               () => _minimizePlayer(),
           const SingleActivator(LogicalKeyboardKey.keyM):
               () => ref.read(favoriteNotifierProvider.notifier).toggleFavorite(channel?.id ?? ''),
+          // Remote-control style "last channel" toggle.
+          const SingleActivator(LogicalKeyboardKey.keyL):
+              () => ref.read(playerProvider.notifier).playPreviousChannel(),
         },
         child: Focus(
           autofocus: true,

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/utils/app_logger.dart';
-import '../../../playlist/presentation/providers/playlist_providers.dart' show dioProvider;
+import '../../../playlist/presentation/providers/playlist_providers.dart' show dioProvider, playlistsProvider;
 import '../../data/datasources/epg_local_data_source.dart';
 import '../../data/datasources/epg_remote_data_source.dart';
 import '../../data/repositories/epg_repository_impl.dart';
@@ -57,6 +57,26 @@ final minuteTickProvider = StreamProvider<DateTime>((ref) async* {
     await Future<void>.delayed(delay);
     yield DateTime.now();
   }
+});
+
+/// Programs from every playlist in a given time range, merged.
+/// Use when the caller doesn't care which playlist a program came from — e.g.
+/// the TV Guide displays channels from all playlists and needs programs for
+/// every one of them.
+final programsInRangeAllPlaylistsProvider =
+    FutureProvider.autoDispose.family<List<Program>, ({DateTime start, DateTime end})>((ref, params) async {
+  final playlists = await ref.watch(playlistsProvider.future);
+  if (playlists.isEmpty) return const <Program>[];
+  final repo = ref.read(epgRepositoryProvider);
+  final results = <Program>[];
+  for (final p in playlists) {
+    final r = await repo.getProgramsInRange(p.id, params.start, params.end);
+    r.fold(
+      (failure) => AppLogger.warning('programsInRange for ${p.id} failed: ${failure.message}'),
+      (list) => results.addAll(list),
+    );
+  }
+  return results;
 });
 
 /// Map of channelId → the currently-airing [Program] for one playlist.

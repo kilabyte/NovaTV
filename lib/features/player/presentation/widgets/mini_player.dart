@@ -194,6 +194,33 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                 if (currentProgram?.value != null) _buildProgressBar(currentProgram!.value!),
                 // Buffering indicator
                 if (playerState.isBuffering) LinearProgressIndicator(minHeight: 2, backgroundColor: AppColors.surfaceElevated, valueColor: AlwaysStoppedAnimation(AppColors.primary)),
+                // Stream health indicator — tiny dot that signals to the
+                // user "this channel is flaky, not your app." Only shown
+                // when the rolling window reports something below "good".
+                if (playerState.health != StreamHealth.good)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2, right: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Semantics(
+                          label: playerState.health == StreamHealth.poor
+                              ? 'Stream health: poor'
+                              : 'Stream health: okay',
+                          child: Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: playerState.health == StreamHealth.poor
+                                  ? Colors.redAccent
+                                  : Colors.orangeAccent,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),

@@ -9,6 +9,7 @@ import '../../data/datasources/playlist_local_data_source.dart';
 import '../../data/datasources/playlist_remote_data_source.dart';
 import '../../data/parsers/m3u_parser.dart';
 import '../../data/repositories/playlist_repository_impl.dart';
+import '../../data/xtream/xtream_client.dart';
 import '../../domain/entities/channel.dart';
 import '../../domain/entities/playlist.dart';
 import '../../domain/repositories/playlist_repository.dart';
@@ -213,6 +214,23 @@ class PlaylistNotifier extends StateNotifier<AsyncValue<List<Playlist>>> {
     final useCase = _ref.read(getPlaylistsUseCaseProvider);
     final result = await useCase(const NoParams());
     state = result.fold((failure) => AsyncValue.error(failure.message, StackTrace.current), (playlists) => AsyncValue.data(playlists));
+  }
+
+  /// Add a playlist from Xtream Codes credentials. Translates the
+  /// (server, user, pass) tuple into the underlying get.php / xmltv.php URLs
+  /// so the existing M3U + EPG pipelines handle it unchanged.
+  Future<void> addXtreamPlaylist({
+    required String name,
+    required String server,
+    required String username,
+    required String password,
+  }) async {
+    final client = XtreamClient(baseUrl: server, username: username, password: password);
+    await addPlaylist(
+      name: name,
+      url: client.m3uUrl,
+      epgUrl: client.epgUrl,
+    );
   }
 
   Future<void> addPlaylist({required String name, required String url, String? epgUrl}) async {

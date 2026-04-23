@@ -847,26 +847,28 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
   }
 
   Widget _buildProgramRow(BuildContext context, Channel channel, List<Program> programs, DateTime gridStart, DateTime gridEnd) {
-    // PERFORMANCE: Calculate visible horizontal viewport to only build visible programs
-    // This dramatically reduces widget count when scrolling through 7 days of content
+    // PERFORMANCE: Use Stack + Positioned so off-viewport cells are omitted
+    // from the widget tree entirely instead of held as SizedBox placeholders.
+    // For a 7-day/N-channel guide this drops a row's widget count from ~350
+    // to ~8 (just the visible window + gaps).
     final screenWidth = MediaQuery.of(context).size.width - _channelColumnWidth;
-    final viewportBuffer = screenWidth; // Buffer on each side for smooth scrolling
+    final viewportBuffer = screenWidth;
     final viewportStart = _currentScrollOffset - viewportBuffer;
     final viewportEnd = _currentScrollOffset + screenWidth + viewportBuffer;
+    final totalWidth = _totalHours * _hourWidth;
 
-    // Programs should already be filtered and sorted from isolate processing
-    // But filter again for safety (this is fast since list is already sorted)
+    // Filter to programs that overlap the grid; list is already sorted.
     final visiblePrograms = <Program>[];
     for (final program in programs) {
       if (program.end.isAfter(gridStart) && program.start.isBefore(gridEnd)) {
         visiblePrograms.add(program);
       }
-      // Early exit if we've passed the grid end (programs are sorted)
       if (program.start.isAfter(gridEnd)) break;
     }
 
     if (visiblePrograms.isEmpty) {
       return Container(
+        width: totalWidth,
         color: AppColors.surfaceElevated.withValues(alpha: 0.3),
         child: Center(
           child: Text('No program data', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
@@ -874,44 +876,50 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       );
     }
 
-    final widgets = <Widget>[];
+    final children = <Widget>[];
     var currentTime = gridStart;
-    var currentPosition = 0.0; // Track cumulative position in pixels
+    var currentPosition = 0.0;
+
+    void addIfVisible(double left, double width, Widget Function() builder) {
+      final right = left + width;
+      if (right < viewportStart || left > viewportEnd) return;
+      children.add(Positioned(
+        left: left,
+        top: 0,
+        width: width,
+        height: _rowHeight,
+        child: builder(),
+      ));
+    }
 
     for (final program in visiblePrograms) {
       if (program.start.isAfter(currentTime)) {
-        final gapDuration = program.start.difference(currentTime);
-        final gapWidth = _durationToWidth(gapDuration);
+        final gapWidth = _durationToWidth(program.start.difference(currentTime));
         if (gapWidth > 0) {
-          // Only add gap if it's in or near the visible viewport
-          final gapEnd = currentPosition + gapWidth;
-          if (gapEnd >= viewportStart && currentPosition <= viewportEnd) {
-            widgets.add(_buildGap(gapWidth));
-          } else {
-            // Add invisible spacer for layout purposes
-            widgets.add(SizedBox(width: gapWidth));
-          }
+          final gapLeft = currentPosition;
+          addIfVisible(gapLeft, gapWidth, () => _buildGap(gapWidth));
           currentPosition += gapWidth;
         }
       }
 
       final displayStart = program.start.isBefore(gridStart) ? gridStart : program.start;
       final displayEnd = program.end.isAfter(gridEnd) ? gridEnd : program.end;
-      final duration = displayEnd.difference(displayStart);
-      final cellWidth = _durationToWidth(duration);
-
-      // Calculate how much of the program extends left of the visible grid
-      final hiddenLeftWidth = program.start.isBefore(gridStart) ? _durationToWidth(gridStart.difference(program.start)) : 0.0;
+      final cellWidth = _durationToWidth(displayEnd.difference(displayStart));
 
       if (cellWidth > 0) {
-        final cellEnd = currentPosition + cellWidth;
-        // Only build full program cell if it's in or near the visible viewport
-        if (cellEnd >= viewportStart && currentPosition <= viewportEnd) {
-          widgets.add(_ProgramCell(program: program, width: cellWidth, height: _rowHeight, onTap: () => _showProgramDetails(context, program, channel), programStartOffset: currentPosition, hiddenLeftWidth: hiddenLeftWidth, scrollOffset: _currentScrollOffset));
-        } else {
-          // Add lightweight placeholder for programs outside viewport
-          widgets.add(SizedBox(width: cellWidth, height: _rowHeight));
-        }
+        final cellLeft = currentPosition;
+        final hiddenLeftWidth = program.start.isBefore(gridStart)
+            ? _durationToWidth(gridStart.difference(program.start))
+            : 0.0;
+        addIfVisible(cellLeft, cellWidth, () => _ProgramCell(
+              program: program,
+              width: cellWidth,
+              height: _rowHeight,
+              onTap: () => _showProgramDetails(context, program, channel),
+              programStartOffset: cellLeft,
+              hiddenLeftWidth: hiddenLeftWidth,
+              scrollOffset: _currentScrollOffset,
+            ));
         currentPosition += cellWidth;
       }
 
@@ -919,14 +927,17 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     }
 
     if (currentTime.isBefore(gridEnd)) {
-      final gapDuration = gridEnd.difference(currentTime);
-      final gapWidth = _durationToWidth(gapDuration);
+      final gapWidth = _durationToWidth(gridEnd.difference(currentTime));
       if (gapWidth > 0) {
-        widgets.add(_buildGap(gapWidth));
+        addIfVisible(currentPosition, gapWidth, () => _buildGap(gapWidth));
       }
     }
 
-    return Row(children: widgets);
+    return SizedBox(
+      width: totalWidth,
+      height: _rowHeight,
+      child: Stack(clipBehavior: Clip.hardEdge, children: children),
+    );
   }
 
   Widget _buildGap(double width) {

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/utils/app_logger.dart';
+import '../../../playlist/presentation/providers/playlist_providers.dart' show dioProvider;
 import '../../data/datasources/epg_local_data_source.dart';
 import '../../data/datasources/epg_remote_data_source.dart';
 import '../../data/repositories/epg_repository_impl.dart';
@@ -14,9 +15,12 @@ final epgLocalDataSourceProvider = Provider<EpgLocalDataSource>((ref) {
   return EpgLocalDataSourceImpl();
 });
 
-/// Provider for EPG remote data source
+/// Provider for EPG remote data source.
+/// Uses the app-wide Dio instance so EPG fetches share the same timeouts as
+/// M3U fetches; previously this created a fresh Dio() with zero timeouts and
+/// stalled EPG URLs could hang forever.
 final epgRemoteDataSourceProvider = Provider<EpgRemoteDataSource>((ref) {
-  return EpgRemoteDataSourceImpl();
+  return EpgRemoteDataSourceImpl(dio: ref.watch(dioProvider));
 });
 
 /// Provider for EPG repository
@@ -53,6 +57,37 @@ final minuteTickProvider = StreamProvider<DateTime>((ref) async* {
     await Future<void>.delayed(delay);
     yield DateTime.now();
   }
+});
+
+/// Map of channelId → the currently-airing [Program] for one playlist.
+///
+/// Instead of each visible channel row doing its own Hive round-trip through
+/// [currentProgramProvider], a single fetch populates the map and every row
+/// reads from the same cache. On a 2000-channel TV Guide this turns 2000
+/// Hive reads/minute into one. Refreshes every minute via [minuteTickProvider].
+final currentProgramsProvider = FutureProvider.autoDispose
+    .family<Map<String, Program>, String>((ref, playlistId) async {
+  ref.watch(minuteTickProvider);
+  if (playlistId.isEmpty) return const {};
+  final repository = ref.read(epgRepositoryProvider);
+  final now = DateTime.now();
+  final result = await repository.getProgramsInRange(
+    playlistId,
+    now.subtract(const Duration(hours: 6)),
+    now.add(const Duration(hours: 6)),
+  );
+  return result.fold(
+    (_) => const <String, Program>{},
+    (programs) {
+      final map = <String, Program>{};
+      for (final p in programs) {
+        if (p.start.isBefore(now) && p.end.isAfter(now)) {
+          map[p.channelId.toLowerCase()] = p;
+        }
+      }
+      return map;
+    },
+  );
 });
 
 /// Provider for current program of a channel

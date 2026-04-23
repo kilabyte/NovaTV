@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
@@ -16,6 +17,10 @@ class WindowService with WindowListener {
 
   Box? _settingsBox;
   bool _isInitialized = false;
+
+  /// Debounces the flood of onWindowResized/onWindowMoved events (dozens/sec
+  /// during a drag) so we don't hammer Hive with a disk write per event.
+  Timer? _saveDebounce;
 
   // Default window size
   static const double _defaultWidth = 1280.0;
@@ -165,35 +170,36 @@ class WindowService with WindowListener {
     }
   }
 
-  // WindowListener callbacks
-
-  @override
-  void onWindowResized() {
-    _saveWindowSettings();
+  /// Trailing-edge debounce: one save at most every 300ms while events arrive.
+  void _scheduleSave() {
+    _saveDebounce?.cancel();
+    _saveDebounce = Timer(const Duration(milliseconds: 300), _saveWindowSettings);
   }
 
-  @override
-  void onWindowMoved() {
-    _saveWindowSettings();
-  }
+  // WindowListener callbacks — route through the debouncer.
 
   @override
-  void onWindowMaximize() {
-    _saveWindowSettings();
-  }
+  void onWindowResized() => _scheduleSave();
 
   @override
-  void onWindowUnmaximize() {
-    _saveWindowSettings();
-  }
+  void onWindowMoved() => _scheduleSave();
+
+  @override
+  void onWindowMaximize() => _scheduleSave();
+
+  @override
+  void onWindowUnmaximize() => _scheduleSave();
 
   @override
   void onWindowClose() {
+    // Flush pending save synchronously on close; we may not get another tick.
+    _saveDebounce?.cancel();
     _saveWindowSettings();
   }
 
   /// Clean up
   void dispose() {
+    _saveDebounce?.cancel();
     if (_isDesktop) {
       windowManager.removeListener(this);
     }

@@ -8,6 +8,7 @@ import 'core/constants/app_constants.dart';
 import 'core/storage/index_service.dart';
 import 'core/utils/app_logger.dart';
 import 'features/settings/presentation/providers/settings_providers.dart';
+import 'shared/widgets/startup_refresh.dart';
 
 /// Main application widget with lifecycle management
 class NovaApp extends ConsumerStatefulWidget {
@@ -22,6 +23,11 @@ class _NovaAppState extends ConsumerState<NovaApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Kick off the startup refresh here rather than only from AppShell so
+    // deep-link launches (e.g. /player/:id) also pick up stale data.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      performStartupRefresh(ref);
+    });
   }
 
   @override

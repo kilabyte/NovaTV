@@ -456,14 +456,17 @@ class _ChannelLogo extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(9),
         child: logoUrl != null && logoUrl!.isNotEmpty
-            ? CachedNetworkImage(
-                imageUrl: logoUrl!,
-                fit: BoxFit.cover,
-                // Add memory limits for better performance on Android
-                memCacheWidth: 48,
-                memCacheHeight: 48,
-                placeholder: (_, __) => _buildPlaceholder(),
-                errorWidget: (_, __, ___) => _buildPlaceholder(),
+            ? Padding(
+                padding: const EdgeInsets.all(4),
+                child: CachedNetworkImage(
+                  imageUrl: logoUrl!,
+                  // Aspect-fit so wide provider logos aren't cropped/squished.
+                  fit: BoxFit.contain,
+                  memCacheWidth: 48,
+                  memCacheHeight: 48,
+                  placeholder: (_, __) => _buildPlaceholder(),
+                  errorWidget: (_, __, ___) => _buildPlaceholder(),
+                ),
               )
             : _buildPlaceholder(),
       ),

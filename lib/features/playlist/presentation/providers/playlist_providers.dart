@@ -305,10 +305,18 @@ final favoriteNotifierProvider = StateNotifierProvider<FavoriteNotifier, AsyncVa
   return FavoriteNotifier(ref);
 });
 
-/// Check if a channel is a favorite
-final isFavoriteProvider = FutureProvider.family<bool, String>((ref, channelId) async {
+/// Set of favorite channel IDs derived once from [favoriteChannelsProvider].
+/// Watching this instead of re-scanning the favorites list inside each
+/// `isFavoriteProvider` call turns per-row O(N) into O(1).
+final favoriteIdsProvider = FutureProvider.autoDispose<Set<String>>((ref) async {
   final favorites = await ref.watch(favoriteChannelsProvider.future);
-  return favorites.any((channel) => channel.id == channelId);
+  return favorites.map((c) => c.id).toSet();
+});
+
+/// Check if a channel is a favorite
+final isFavoriteProvider = FutureProvider.autoDispose.family<bool, String>((ref, channelId) async {
+  final ids = await ref.watch(favoriteIdsProvider.future);
+  return ids.contains(channelId);
 });
 
 /// Toggle favorite for a channel (returns a provider that triggers the toggle)

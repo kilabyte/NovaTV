@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../../../../core/utils/app_logger.dart';
 import '../../../playlist/domain/entities/channel.dart';
 import '../../../playlist/presentation/providers/playlist_providers.dart' show playlistRepositoryProvider, recentlyWatchedNotifierProvider;
 
@@ -53,6 +56,11 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     final player = Player();
     final controller = VideoController(player);
 
+    // IPTV-friendly tuning for the libmpv desktop backend. mpv options don't
+    // exist on Android/iOS so we guard behind a platform check; errors from
+    // setProperty are fatal on those platforms.
+    _applyMpvIptvTuning(player);
+
     state = state.copyWith(player: player, controller: controller, isMinimized: false, clearError: true);
 
     // Set up listeners. Track subscriptions so stop() can cancel them before
@@ -83,6 +91,16 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
           lowerError.contains('seek failed') ||
           lowerError.contains('discarding frame') ||
           lowerError.contains('corrupted') && !lowerError.contains('file')) {
+        return;
+      }
+
+      // Auto-reconnect on live-window drift (common after sleep/wake on HLS
+      // streams). Instead of surfacing an error, silently reopen the stream.
+      if (lowerError.contains('behind live window') ||
+          lowerError.contains('live window') ||
+          lowerError.contains('stream disconnected')) {
+        AppLogger.info('Auto-reconnecting after live-window drift');
+        _tryReconnect();
         return;
       }
 
@@ -180,6 +198,47 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       await Future<void>.delayed(const Duration(milliseconds: 100));
       await playChannel(channelId);
     }
+  }
+
+  /// Silent reconnect: re-open the current channel's URL without tearing the
+  /// player down. Used when the stream drifts past its live window or the
+  /// server briefly drops the connection.
+  Future<void> _tryReconnect() async {
+    final channel = state.channel;
+    final player = state.player;
+    if (channel == null || player == null) return;
+
+    final httpHeaders = <String, String>{};
+    if (channel.userAgent != null) httpHeaders['User-Agent'] = channel.userAgent!;
+    if (channel.referrer != null) httpHeaders['Referer'] = channel.referrer!;
+    if (channel.headers != null) httpHeaders.addAll(channel.headers!);
+    try {
+      await player.open(Media(channel.url, httpHeaders: httpHeaders.isNotEmpty ? httpHeaders : null));
+    } catch (e) {
+      AppLogger.warning('Silent reconnect failed: $e');
+    }
+  }
+
+  /// Apply IPTV-friendly mpv options. mpv-only; silently skipped on
+  /// Android/iOS/web. These settings cut buffering stalls and let FFmpeg
+  /// automatically reconnect if the server drops the connection.
+  void _applyMpvIptvTuning(Player player) {
+    if (kIsWeb) return;
+    if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) return;
+    final platform = player.platform;
+    if (platform is! NativePlayer) return;
+    void setProp(String name, String value) {
+      platform.setProperty(name, value).catchError((Object e) {
+        AppLogger.warning('mpv setProperty $name=$value failed: $e');
+      });
+    }
+    setProp('cache', 'yes');
+    setProp('cache-secs', '30');
+    setProp('demuxer-max-bytes', '67108864'); // 64 MiB forward buffer
+    setProp('demuxer-readahead-secs', '20');
+    setProp('network-timeout', '10');
+    // FFmpeg HTTP reconnect on dropout — critical for IPTV.
+    setProp('stream-lavf-o', 'reconnect=1,reconnect_streamed=1,reconnect_delay_max=5');
   }
 
   @override

@@ -2,6 +2,7 @@ import 'package:hive_ce/hive.dart';
 
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/storage/hive_index_helper.dart';
+import '../../../../core/storage/hive_storage.dart';
 import '../models/channel_model.dart';
 import '../models/playlist_model.dart';
 
@@ -58,56 +59,13 @@ class PlaylistLocalDataSourceImpl implements PlaylistLocalDataSource {
   static const String _playlistBoxName = 'playlists';
   static const String _channelBoxName = 'channels';
 
-  Box<PlaylistModel>? _playlistBox;
-  Box<ChannelModel>? _channelBox;
+  // Delegate to the project's shared safeOpenBox helper so two concurrent
+  // awaiting callers can't both call Hive.openBox and hit a lock error.
+  Future<Box<PlaylistModel>> get playlistBox =>
+      safeOpenBox<PlaylistModel>(_playlistBoxName);
 
-  Future<Box<PlaylistModel>> get playlistBox async {
-    if (_playlistBox == null || !_playlistBox!.isOpen) {
-      try {
-        _playlistBox = await Hive.openBox<PlaylistModel>(_playlistBoxName);
-      } catch (e) {
-        // Handle lock errors - wait and retry
-        if (Hive.isBoxOpen(_playlistBoxName)) {
-          try {
-            await Hive.box<PlaylistModel>(_playlistBoxName).close();
-          } catch (_) {
-            // Ignore close errors
-          }
-          await Future.delayed(const Duration(milliseconds: 100));
-          _playlistBox = await Hive.openBox<PlaylistModel>(_playlistBoxName);
-        } else {
-          // Wait and retry once
-          await Future.delayed(const Duration(milliseconds: 200));
-          _playlistBox = await Hive.openBox<PlaylistModel>(_playlistBoxName);
-        }
-      }
-    }
-    return _playlistBox!;
-  }
-
-  Future<Box<ChannelModel>> get channelBox async {
-    if (_channelBox == null || !_channelBox!.isOpen) {
-      try {
-        _channelBox = await Hive.openBox<ChannelModel>(_channelBoxName);
-      } catch (e) {
-        // Handle lock errors - wait and retry
-        if (Hive.isBoxOpen(_channelBoxName)) {
-          try {
-            await Hive.box<ChannelModel>(_channelBoxName).close();
-          } catch (_) {
-            // Ignore close errors
-          }
-          await Future.delayed(const Duration(milliseconds: 100));
-          _channelBox = await Hive.openBox<ChannelModel>(_channelBoxName);
-        } else {
-          // Wait and retry once
-          await Future.delayed(const Duration(milliseconds: 200));
-          _channelBox = await Hive.openBox<ChannelModel>(_channelBoxName);
-        }
-      }
-    }
-    return _channelBox!;
-  }
+  Future<Box<ChannelModel>> get channelBox =>
+      safeOpenBox<ChannelModel>(_channelBoxName);
 
   @override
   Future<List<PlaylistModel>> getPlaylists() async {
@@ -153,7 +111,24 @@ class PlaylistLocalDataSourceImpl implements PlaylistLocalDataSource {
   Future<List<ChannelModel>> getChannels(String playlistId) async {
     try {
       final box = await channelBox;
-      // Filter during iteration for better performance
+
+      // Use the playlistId index if available for O(1) lookup instead of
+      // scanning every channel on the main isolate.
+      final indexedKeys = await HiveIndexHelper.getIndexedKeys(
+        baseBoxName: _channelBoxName,
+        fieldName: 'playlistId',
+        fieldValue: playlistId,
+      );
+      if (indexedKeys.isNotEmpty) {
+        final channels = <ChannelModel>[];
+        for (final key in indexedKeys) {
+          final c = box.get(key);
+          if (c != null) channels.add(c);
+        }
+        return channels;
+      }
+
+      // Fallback: scan for playlists with no index yet (fresh install).
       final channels = <ChannelModel>[];
       for (final channel in box.values) {
         if (channel.playlistId == playlistId) {
@@ -198,8 +173,8 @@ class PlaylistLocalDataSourceImpl implements PlaylistLocalDataSource {
     }
   }
 
-  /// Bulk-rebuild the group and isFavorite indexes from the current box state.
-  /// Runs a single clear + putAll per index box instead of N sequential writes.
+  /// Bulk-rebuild the group, isFavorite and playlistId indexes from the
+  /// current box state. Single clear + putAll per index box.
   Future<void> _rebuildChannelIndexes(Box<ChannelModel> box) async {
     await HiveIndexHelper.buildIndex<ChannelModel>(
       baseBoxName: _channelBoxName,
@@ -213,6 +188,14 @@ class PlaylistLocalDataSourceImpl implements PlaylistLocalDataSource {
       baseBoxName: _channelBoxName,
       fieldName: 'isFavorite',
       getFieldValue: (c) => c.isFavorite ? 'true' : '',
+      getKey: (c) => c.id,
+    );
+    // Keeps getChannels(playlistId) / deleteChannels O(1) lookup instead of
+    // an O(N) main-isolate scan.
+    await HiveIndexHelper.buildIndex<ChannelModel>(
+      baseBoxName: _channelBoxName,
+      fieldName: 'playlistId',
+      getFieldValue: (c) => c.playlistId,
       getKey: (c) => c.id,
     );
   }
@@ -263,8 +246,20 @@ class PlaylistLocalDataSourceImpl implements PlaylistLocalDataSource {
   Future<void> deleteChannels(String playlistId) async {
     try {
       final box = await channelBox;
-      final keysToDelete = box.keys.where((key) => box.get(key)?.playlistId == playlistId).toList();
+
+      // Use the playlistId index if present for O(1) key lookup.
+      final indexed = await HiveIndexHelper.getIndexedKeys(
+        baseBoxName: _channelBoxName,
+        fieldName: 'playlistId',
+        fieldValue: playlistId,
+      );
+      final keysToDelete = indexed.isNotEmpty
+          ? indexed.toList()
+          : box.keys.where((key) => box.get(key)?.playlistId == playlistId).toList();
+
       await box.deleteAll(keysToDelete);
+      // Rebuild indexes so the deleted ids drop out.
+      await _rebuildChannelIndexes(box);
     } catch (e) {
       throw CacheException('Failed to delete channels: $e');
     }

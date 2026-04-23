@@ -11,18 +11,14 @@ import '../../core/utils/app_logger.dart';
 import '../../features/epg/presentation/providers/epg_providers.dart';
 import '../../features/player/presentation/providers/player_providers.dart';
 import '../../features/player/presentation/widgets/mini_player.dart';
-import '../../features/playlist/domain/entities/playlist.dart';
 import '../../features/playlist/presentation/providers/playlist_providers.dart';
 import '../../features/settings/presentation/providers/settings_providers.dart';
 import 'refresh_toast.dart';
 import 'responsive_layout.dart';
+import 'startup_refresh.dart';
 
 /// Provider to track pinned groups
 final pinnedGroupsProvider = StateProvider<Set<String>>((ref) => {});
-
-/// App-lifetime flag so we only perform the startup auto-refresh once per
-/// process, even if the shell remounts (e.g. router recomputes).
-bool _appStartupRefreshRan = false;
 
 /// Clean modern app shell
 /// Desktop: Left sidebar with groups, main content area
@@ -69,87 +65,11 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
     }
   }
 
-  /// Refresh stale playlists and EPG on first app launch.
-  /// Guarded by a process-wide flag so shell remounts don't re-refresh.
+  /// Kick off the at-most-once startup refresh via the shared helper.
+  /// Implementation is in startup_refresh.dart so deep-link launches (which
+  /// skip AppShell) can trigger the same logic from NovaApp.
   Future<void> _checkAutoRefresh() async {
-    if (_appStartupRefreshRan) return;
-    _appStartupRefreshRan = true;
-
-    AppLogger.info('Starting auto-refresh on startup (background thread)...');
-    unawaited(_refreshInBackground());
-  }
-
-  /// Perform refresh operations in background thread
-  Future<void> _refreshInBackground() async {
-    try {
-      // Resolve the actual playlist list, waiting for the provider if needed.
-      final playlists = await ref.read(playlistsProvider.future);
-      if (!mounted) return;
-      if (playlists.isEmpty) {
-        AppLogger.info('No playlists to refresh');
-        return;
-      }
-
-      // Only refresh playlists/EPGs that are actually stale.
-      final stalePlaylists = playlists.where((p) => p.needsRefresh).toList();
-      final staleEpgs = playlists
-          .where((p) => p.hasEpg && p.epgUrl != null && p.epgUrl!.isNotEmpty && p.needsRefresh)
-          .toList();
-
-      if (stalePlaylists.isEmpty && staleEpgs.isEmpty) {
-        AppLogger.info('Auto-refresh: nothing stale, skipping');
-        return;
-      }
-
-      final refreshNotifier = ref.read(refreshStateProvider.notifier);
-      if (stalePlaylists.isNotEmpty) refreshNotifier.startPlaylistRefresh();
-      if (staleEpgs.isNotEmpty) refreshNotifier.startEpgRefresh();
-
-      Future<bool> refreshOne(Playlist p) async {
-        try {
-          AppLogger.info('Refreshing playlist: ${p.name}');
-          await ref.read(playlistNotifierProvider.notifier).refreshPlaylist(p.id);
-          return true;
-        } catch (e) {
-          AppLogger.warning('Failed to refresh playlist ${p.name}: $e');
-          return false;
-        }
-      }
-
-      Future<bool> refreshEpg(Playlist p) async {
-        try {
-          AppLogger.info('Refreshing EPG for playlist: ${p.name}');
-          await ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(p.id, p.epgUrl!);
-          return true;
-        } catch (e) {
-          AppLogger.warning('Failed to refresh EPG for ${p.name}: $e');
-          return false;
-        }
-      }
-
-      if (stalePlaylists.isNotEmpty) {
-        final results = await Future.wait(stalePlaylists.map(refreshOne), eagerError: false);
-        if (!mounted) return;
-        final allOk = results.every((ok) => ok);
-        refreshNotifier.completePlaylistRefresh(success: allOk);
-        ref.read(goToNowTriggerProvider.notifier).state++;
-      }
-
-      if (staleEpgs.isNotEmpty) {
-        final results = await Future.wait(staleEpgs.map(refreshEpg), eagerError: false);
-        if (!mounted) return;
-        final allOk = results.every((ok) => ok);
-        refreshNotifier.completeEpgRefresh(success: allOk);
-        ref.read(goToNowTriggerProvider.notifier).state++;
-      }
-
-      AppLogger.info('Auto-refresh completed');
-    } catch (e, st) {
-      AppLogger.error('Error during auto-refresh: $e', e, st);
-      if (mounted) {
-        ref.read(refreshStateProvider.notifier).showMessage('Refresh failed', isError: true);
-      }
-    }
+    unawaited(performStartupRefresh(ref));
   }
 
   int _calculateSelectedIndex(BuildContext context) {

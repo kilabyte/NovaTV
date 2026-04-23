@@ -98,7 +98,8 @@ class IndexService {
     }
   }
 
-  /// Build indexes for channels
+  /// Build indexes for channels, skipping when they already exist (warm
+  /// launches shouldn't pay to rebuild indexes that are still valid).
   static Future<void> _buildChannelIndexes() async {
     try {
       if (!await Hive.boxExists(_channelsBoxName)) {
@@ -110,15 +111,24 @@ class IndexService {
         return;
       }
 
+      final groupExists = await HiveIndexHelper.indexExists(baseBoxName: _channelsBoxName, fieldName: 'group');
+      final favExists = await HiveIndexHelper.indexExists(baseBoxName: _channelsBoxName, fieldName: 'isFavorite');
+      if (groupExists && favExists) {
+        AppLogger.debug('Channel indexes already exist, skipping rebuild');
+        return;
+      }
+
       AppLogger.debug('Building channel indexes...');
 
-      // Build group index
-      await HiveIndexHelper.buildIndex<ChannelModel>(baseBoxName: _channelsBoxName, fieldName: 'group', getFieldValue: (c) => c.group ?? '', getKey: (c) => c.id);
+      if (!groupExists) {
+        await HiveIndexHelper.buildIndex<ChannelModel>(baseBoxName: _channelsBoxName, fieldName: 'group', getFieldValue: (c) => c.group ?? '', getKey: (c) => c.id);
+      }
 
-      // Build isFavorite index. Return '' for non-favorites so buildIndex's
-      // skip-empty branch keeps the index sparse; this matches the convention
-      // used by PlaylistLocalDataSourceImpl._rebuildChannelIndexes.
-      await HiveIndexHelper.buildIndex<ChannelModel>(baseBoxName: _channelsBoxName, fieldName: 'isFavorite', getFieldValue: (c) => c.isFavorite ? 'true' : '', getKey: (c) => c.id);
+      if (!favExists) {
+        // Return '' for non-favorites so buildIndex's skip-empty branch keeps
+        // the index sparse; matches PlaylistLocalDataSourceImpl's convention.
+        await HiveIndexHelper.buildIndex<ChannelModel>(baseBoxName: _channelsBoxName, fieldName: 'isFavorite', getFieldValue: (c) => c.isFavorite ? 'true' : '', getKey: (c) => c.id);
+      }
 
       AppLogger.debug('Channel indexes built successfully');
     } catch (e) {
@@ -161,7 +171,9 @@ class IndexService {
     }
   }
 
-  /// Build indexes for programs in a specific playlist
+  /// Build indexes for programs in a specific playlist. Skips when both
+  /// indexes already exist to avoid re-scanning 100MB+ program boxes on
+  /// every warm launch.
   static Future<void> _buildProgramIndexesForPlaylist(String programsBoxName) async {
     try {
       final box = await safeOpenBox<ProgramModel>(programsBoxName);
@@ -169,20 +181,29 @@ class IndexService {
         return;
       }
 
-      // Build channelId index (most frequently queried)
-      await HiveIndexHelper.buildIndex<ProgramModel>(baseBoxName: programsBoxName, fieldName: 'channelId', getFieldValue: (p) => p.channelId, getKey: (p) => p.id);
+      final channelIdExists = await HiveIndexHelper.indexExists(baseBoxName: programsBoxName, fieldName: 'channelId');
+      final startDateExists = await HiveIndexHelper.indexExists(baseBoxName: programsBoxName, fieldName: 'startDate');
+      if (channelIdExists && startDateExists) {
+        return;
+      }
 
-      // Build startTime index (for time range queries)
-      // Use date as key (YYYYMMDD format) for efficient range queries
-      await HiveIndexHelper.buildIndex<ProgramModel>(
-        baseBoxName: programsBoxName,
-        fieldName: 'startDate',
-        getFieldValue: (p) {
-          final date = p.start;
-          return '${date.year}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}';
-        },
-        getKey: (p) => p.id,
-      );
+      if (!channelIdExists) {
+        // Lowercased to match HiveIndexHelper.getIndexedKeys normalization.
+        await HiveIndexHelper.buildIndex<ProgramModel>(baseBoxName: programsBoxName, fieldName: 'channelId', getFieldValue: (p) => p.channelId.toLowerCase(), getKey: (p) => p.id);
+      }
+
+      if (!startDateExists) {
+        // Use date as key (YYYYMMDD format) for efficient range queries.
+        await HiveIndexHelper.buildIndex<ProgramModel>(
+          baseBoxName: programsBoxName,
+          fieldName: 'startDate',
+          getFieldValue: (p) {
+            final date = p.start;
+            return '${date.year}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}';
+          },
+          getKey: (p) => p.id,
+        );
+      }
     } catch (e) {
       AppLogger.warning('Failed to build indexes for $programsBoxName: $e');
     }

@@ -44,10 +44,11 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
   static const double _rowHeight = 72;
   static const double _channelColumnWidth = 140;
   static const int _hoursPerDay = 24;
-  static const int _daysToShow = 7; // Yesterday + Today + 5 days ahead
+  static const int _daysToShow = 7; // Today + 6 days ahead
   static const int _totalHours = _hoursPerDay * _daysToShow;
 
-  // Base date is yesterday at 00:00
+  // Base date is today at 00:00; the grid and date chips extend forward from
+  // here so users never see yesterday in the chip row.
   late DateTime _baseDate;
 
   // Debounce timer for scroll events to reduce rebuilds
@@ -64,9 +65,10 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
   void initState() {
     super.initState();
 
-    // Set base date to yesterday at midnight
+    // Base date = today at 00:00. The grid and date-chip strip both start
+    // here so users never see yesterday.
     final now = DateTime.now();
-    _baseDate = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 1));
+    _baseDate = DateTime(now.year, now.month, now.day);
 
     _horizontalControllerGroup = LinkedScrollControllerGroup();
     _timeHeaderController = _horizontalControllerGroup.addAndGet();
@@ -445,9 +447,8 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
 
   Widget _buildDateSelector(BuildContext context, DateTime selectedDate) {
     final dateFormat = DateFormat.E();
-    final dates = List.generate(7, (i) {
-      final now = DateTime.now();
-      return DateTime(now.year, now.month, now.day).add(Duration(days: i - 1));
+    final dates = List.generate(_daysToShow, (i) {
+      return _baseDate.add(Duration(days: i));
     });
 
     return SizedBox(

@@ -1,8 +1,13 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'config/router/app_router.dart';
+import 'config/router/routes.dart';
 import 'config/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
 import 'core/storage/index_service.dart';
@@ -19,6 +24,9 @@ class NovaApp extends ConsumerStatefulWidget {
 }
 
 class _NovaAppState extends ConsumerState<NovaApp> with WidgetsBindingObserver {
+  /// Channel that receives native macOS menu events (e.g. Preferences).
+  static const MethodChannel _menuChannel = MethodChannel('io.kilabyte.novatv/menu');
+
   @override
   void initState() {
     super.initState();
@@ -28,6 +36,19 @@ class _NovaAppState extends ConsumerState<NovaApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       performStartupRefresh(ref);
     });
+
+    // Listen for Cmd+, from the macOS menu bar.
+    if (!kIsWeb && Platform.isMacOS) {
+      _menuChannel.setMethodCallHandler(_handleMenuCall);
+    }
+  }
+
+  Future<void> _handleMenuCall(MethodCall call) async {
+    if (call.method == 'openSettings') {
+      // Use the router directly rather than relying on a BuildContext so this
+      // works whether or not a route is currently focused.
+      ref.read(appRouterProvider).go(Routes.settings);
+    }
   }
 
   @override

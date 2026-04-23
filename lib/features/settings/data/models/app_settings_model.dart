@@ -49,6 +49,16 @@ class AppSettingsModel extends HiveObject {
   @HiveField(14)
   final bool groupsSectionExpanded;
 
+  /// Player volume in the 0.0-1.0 range. Persisted so volume sticks across
+  /// app restarts.
+  @HiveField(15)
+  final double playerVolume;
+
+  /// Whether playback is muted. Independent of [playerVolume] so the user
+  /// can unmute back to their previous setting without losing it.
+  @HiveField(16)
+  final bool playerMuted;
+
   AppSettingsModel({
     this.themeMode = 'dark',
     this.autoRefreshPlaylists = false,
@@ -65,6 +75,8 @@ class AppSettingsModel extends HiveObject {
     this.lastTvGuideCategory,
     this.lastSelectedSidebarRoute,
     this.groupsSectionExpanded = true,
+    this.playerVolume = 1.0,
+    this.playerMuted = false,
   });
 
   AppSettingsModel copyWith({
@@ -84,6 +96,8 @@ class AppSettingsModel extends HiveObject {
     bool clearLastTvGuideCategory = false,
     String? lastSelectedSidebarRoute,
     bool? groupsSectionExpanded,
+    double? playerVolume,
+    bool? playerMuted,
   }) {
     return AppSettingsModel(
       themeMode: themeMode ?? this.themeMode,
@@ -101,6 +115,8 @@ class AppSettingsModel extends HiveObject {
       lastTvGuideCategory: clearLastTvGuideCategory ? null : (lastTvGuideCategory ?? this.lastTvGuideCategory),
       lastSelectedSidebarRoute: lastSelectedSidebarRoute ?? this.lastSelectedSidebarRoute,
       groupsSectionExpanded: groupsSectionExpanded ?? this.groupsSectionExpanded,
+      playerVolume: playerVolume ?? this.playerVolume,
+      playerMuted: playerMuted ?? this.playerMuted,
     );
   }
 }

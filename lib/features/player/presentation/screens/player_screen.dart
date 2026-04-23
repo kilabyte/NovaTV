@@ -202,8 +202,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               () => _toggleControls(),
           const SingleActivator(LogicalKeyboardKey.escape):
               () => _minimizePlayer(),
+          // M = mute toggle (universal media-player convention).
           const SingleActivator(LogicalKeyboardKey.keyM):
-              () => ref.read(favoriteNotifierProvider.notifier).toggleFavorite(channel?.id ?? ''),
+              () => ref.read(playerProvider.notifier).toggleMute(),
+          // Arrow up/down nudge volume by 5%.
+          const SingleActivator(LogicalKeyboardKey.arrowUp):
+              () => ref.read(playerProvider.notifier).adjustVolume(0.05),
+          const SingleActivator(LogicalKeyboardKey.arrowDown):
+              () => ref.read(playerProvider.notifier).adjustVolume(-0.05),
+          // Favourite moved off M — keep it on the star button / top bar.
           // Remote-control style "last channel" toggle.
           const SingleActivator(LogicalKeyboardKey.keyL):
               () => ref.read(playerProvider.notifier).playPreviousChannel(),
@@ -513,6 +520,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             ),
           ),
           if (channel != null) ...[
+            const _VolumeControl(),
             _ControlIconButton(
               icon: isFavorite
                   ? Icons.star_rounded
@@ -1582,6 +1590,66 @@ class _EpgProgramTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Volume + mute control for the player top bar. Shows a mute-state icon
+/// button and an inline horizontal slider. The slider only appears on a
+/// wide enough layout to avoid cramping mobile; on narrow screens the user
+/// taps the icon to mute and relies on the keyboard/media keys for level.
+class _VolumeControl extends ConsumerWidget {
+  const _VolumeControl();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final volume = ref.watch(playerProvider.select((s) => s.volume));
+    final isMuted = ref.watch(playerProvider.select((s) => s.isMuted));
+    final notifier = ref.read(playerProvider.notifier);
+
+    final icon = isMuted || volume == 0
+        ? Icons.volume_off_rounded
+        : volume < 0.33
+            ? Icons.volume_mute_rounded
+            : volume < 0.66
+                ? Icons.volume_down_rounded
+                : Icons.volume_up_rounded;
+
+    // LayoutBuilder so the slider only renders when the top bar has enough
+    // horizontal room. On very narrow layouts, just the mute button.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final showSlider = MediaQuery.of(context).size.width >= 520;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ControlIconButton(
+              icon: icon,
+              semanticLabel: isMuted ? 'Unmute' : 'Mute',
+              onTap: notifier.toggleMute,
+            ),
+            if (showSlider)
+              SizedBox(
+                width: 100,
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 3,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                    activeTrackColor: AppColors.primary,
+                    inactiveTrackColor: AppColors.surfaceElevated,
+                    thumbColor: AppColors.primary,
+                    overlayColor: AppColors.primary.withValues(alpha: 0.15),
+                  ),
+                  child: Slider(
+                    value: isMuted ? 0.0 : volume,
+                    onChanged: (v) => notifier.setVolume(v),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

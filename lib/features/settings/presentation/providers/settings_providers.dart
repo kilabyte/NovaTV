@@ -136,6 +136,19 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsModel> {
     _saveSettings();
   }
 
+  void setPlayerVolume(double volume) {
+    final clamped = volume.clamp(0.0, 1.0);
+    if (state.playerVolume == clamped) return;
+    state = state.copyWith(playerVolume: clamped);
+    _saveSettings();
+  }
+
+  void setPlayerMuted(bool muted) {
+    if (state.playerMuted == muted) return;
+    state = state.copyWith(playerMuted: muted);
+    _saveSettings();
+  }
+
   Future<void> resetToDefaults() async {
     state = AppSettingsModel();
     await _saveSettings();

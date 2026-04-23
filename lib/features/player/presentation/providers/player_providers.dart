@@ -9,6 +9,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../../../../core/utils/app_logger.dart';
 import '../../../playlist/domain/entities/channel.dart';
 import '../../../playlist/presentation/providers/playlist_providers.dart' show playlistRepositoryProvider, recentlyWatchedNotifierProvider;
+import '../../../settings/presentation/providers/settings_providers.dart';
 
 /// Stream health indicator — aggregates recent buffering events into a
 /// green/yellow/red signal surfaced on the mini-player.
@@ -31,6 +32,15 @@ class PlayerState {
   /// Rolling-window stream health score.
   final StreamHealth health;
 
+  /// User-set playback volume in the 0.0-1.0 range. media_kit's native scale
+  /// is 0-100; we scale at the call site so the rest of the app stays in
+  /// logical units.
+  final double volume;
+
+  /// Whether playback is muted. Kept separate from [volume] so unmute can
+  /// restore the previous level.
+  final bool isMuted;
+
   const PlayerState({
     this.channel,
     this.player,
@@ -41,6 +51,8 @@ class PlayerState {
     this.errorMessage,
     this.previousChannelId,
     this.health = StreamHealth.good,
+    this.volume = 1.0,
+    this.isMuted = false,
   });
 
   PlayerState copyWith({
@@ -54,6 +66,8 @@ class PlayerState {
     bool clearError = false,
     String? previousChannelId,
     StreamHealth? health,
+    double? volume,
+    bool? isMuted,
   }) {
     return PlayerState(
       channel: channel ?? this.channel,
@@ -65,8 +79,14 @@ class PlayerState {
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       previousChannelId: previousChannelId ?? this.previousChannelId,
       health: health ?? this.health,
+      volume: volume ?? this.volume,
+      isMuted: isMuted ?? this.isMuted,
     );
   }
+
+  /// Effective volume sent to the player: 0 when muted, otherwise the user
+  /// setting.
+  double get effectiveVolume => isMuted ? 0.0 : volume;
 
   bool get hasActivePlayer => player != null && channel != null;
 }
@@ -90,7 +110,12 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   final List<DateTime> _bufferingEvents = [];
   Timer? _healthTimer;
 
-  PlayerNotifier(this._ref) : super(const PlayerState());
+  PlayerNotifier(this._ref) : super(const PlayerState()) {
+    // Seed volume/mute from persisted settings so the first play respects
+    // what the user had before.
+    final s = _ref.read(appSettingsProvider);
+    state = state.copyWith(volume: s.playerVolume, isMuted: s.playerMuted);
+  }
 
   /// Play a channel
   Future<void> playChannel(String channelId) async {
@@ -127,6 +152,11 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     );
     _bufferingEvents.clear();
     _ensureHealthTimer();
+
+    // Apply persisted volume immediately. media_kit takes 0-100.
+    player.setVolume(state.effectiveVolume * 100).catchError((Object e) {
+      AppLogger.warning('Initial setVolume failed: $e');
+    });
 
     // Set up listeners. Track subscriptions so stop() can cancel them before
     // disposing the player; without this, late events from a prior player can
@@ -277,6 +307,45 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     final prev = state.previousChannelId;
     if (prev == null) return;
     await playChannel(prev);
+  }
+
+  /// Set the logical volume in the 0.0-1.0 range and persist it. Unmutes if
+  /// the user is adjusting the slider while muted (the expected behaviour on
+  /// every major media player).
+  Future<void> setVolume(double volume) async {
+    final clamped = volume.clamp(0.0, 1.0);
+    final shouldUnmute = state.isMuted && clamped > 0;
+    state = state.copyWith(
+      volume: clamped,
+      isMuted: shouldUnmute ? false : state.isMuted,
+    );
+    _ref.read(appSettingsProvider.notifier).setPlayerVolume(clamped);
+    if (shouldUnmute) {
+      _ref.read(appSettingsProvider.notifier).setPlayerMuted(false);
+    }
+    try {
+      await state.player?.setVolume(state.effectiveVolume * 100);
+    } catch (e) {
+      AppLogger.warning('setVolume failed: $e');
+    }
+  }
+
+  /// Toggle mute. Preserves the pre-mute volume so unmute restores it.
+  Future<void> toggleMute() async {
+    final newMuted = !state.isMuted;
+    state = state.copyWith(isMuted: newMuted);
+    _ref.read(appSettingsProvider.notifier).setPlayerMuted(newMuted);
+    try {
+      await state.player?.setVolume(state.effectiveVolume * 100);
+    } catch (e) {
+      AppLogger.warning('toggleMute setVolume failed: $e');
+    }
+  }
+
+  /// Nudge the volume up or down by [delta] (in the 0.0-1.0 scale). Used by
+  /// the arrow-key shortcuts on the player.
+  Future<void> adjustVolume(double delta) async {
+    await setVolume(state.volume + delta);
   }
 
   /// Cap the per-URL MIME cache to avoid unbounded growth in long-lived

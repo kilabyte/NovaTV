@@ -57,9 +57,12 @@ class Playlist extends Equatable {
     this.headers,
   });
 
-  /// Check if playlist needs refresh based on interval
+  /// Check if playlist needs refresh based on interval.
+  /// Honours the auto-refresh toggle: a playlist the user has explicitly
+  /// opted out of auto-refresh never reports as stale.
   bool get needsRefresh {
-    if (!autoRefresh || lastRefreshed == null) return true;
+    if (!autoRefresh) return false;
+    if (lastRefreshed == null) return true;
     final difference = DateTime.now().difference(lastRefreshed!);
     return difference.inHours >= refreshIntervalHours;
   }

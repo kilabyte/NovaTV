@@ -33,40 +33,6 @@ class FadeThroughTransition extends CustomTransitionPage<void> {
         );
 }
 
-/// Shared axis transition - horizontal slide with fade
-class SharedAxisHorizontalTransition extends CustomTransitionPage<void> {
-  SharedAxisHorizontalTransition({
-    required super.child,
-    super.key,
-  }) : super(
-          transitionDuration: const Duration(milliseconds: 350),
-          reverseTransitionDuration: const Duration(milliseconds: 300),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            final curvedAnimation = CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-              reverseCurve: Curves.easeInCubic,
-            );
-
-            return SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0.1, 0.0),
-                end: Offset.zero,
-              ).animate(curvedAnimation),
-              child: FadeTransition(
-                opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
-                  CurvedAnimation(
-                    parent: animation,
-                    curve: const Interval(0.0, 0.75, curve: Curves.easeOut),
-                  ),
-                ),
-                child: child,
-              ),
-            );
-          },
-        );
-}
-
 /// Zoom fade transition - for modal-like content
 class ZoomFadeTransition extends CustomTransitionPage<void> {
   ZoomFadeTransition({

@@ -40,6 +40,9 @@ web/env.js
 .env.*
 !.env.example
 
+# MCP config holds local paths + ASC API key IDs — local-only
+.mcp.json
+
 # Symbolication related
 app.*.symbols
 

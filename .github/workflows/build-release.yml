@@ -354,8 +354,14 @@ jobs:
   release:
     needs: [build-android, build-linux, build-windows, build-macos, build-ios]
     runs-on: ubuntu-latest
-    # Release on: tag push, main branch push, or workflow_dispatch with create_release=true
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+    # Only create GitHub Releases on tag pushes and explicit workflow_dispatch.
+    # Previously this also ran on main-branch pushes, which raced with the
+    # tag-push run on the same commit — the main-push run (IS_TAG=false →
+    # prerelease=true) would often land last and flag the release as
+    # Pre-release, hiding it from the "Latest" slot on the releases page.
+    # Branch pushes still build the matrix for CI validation; they just don't
+    # publish a release.
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
     permissions:
       contents: write
     steps:

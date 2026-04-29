@@ -214,6 +214,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           // Remote-control style "last channel" toggle.
           const SingleActivator(LogicalKeyboardKey.keyL):
               () => ref.read(playerProvider.notifier).playPreviousChannel(),
+          // Android TV remotes emit channelUp/channelDown for the dedicated
+          // channel buttons. PageUp/PageDown let keyboard users zap too.
+          const SingleActivator(LogicalKeyboardKey.channelUp):
+              () => ref.read(playerProvider.notifier).playPreviousChannel(),
+          const SingleActivator(LogicalKeyboardKey.channelDown):
+              () => ref.read(playerProvider.notifier).playPreviousChannel(),
+          const SingleActivator(LogicalKeyboardKey.pageUp):
+              () => ref.read(playerProvider.notifier).playPreviousChannel(),
+          const SingleActivator(LogicalKeyboardKey.pageDown):
+              () => ref.read(playerProvider.notifier).playPreviousChannel(),
+          // Media keys from the TV remote / Bluetooth headphones.
+          const SingleActivator(LogicalKeyboardKey.mediaPlay):
+              () => ref.read(playerProvider.notifier).togglePlayPause(),
+          const SingleActivator(LogicalKeyboardKey.mediaPause):
+              () => ref.read(playerProvider.notifier).togglePlayPause(),
+          const SingleActivator(LogicalKeyboardKey.mediaPlayPause):
+              () => ref.read(playerProvider.notifier).togglePlayPause(),
+          const SingleActivator(LogicalKeyboardKey.mediaStop):
+              () => ref.read(playerProvider.notifier).stop(),
         },
         child: Focus(
           autofocus: true,

@@ -16,6 +16,7 @@ import '../../features/settings/presentation/providers/settings_providers.dart';
 import 'refresh_toast.dart';
 import 'responsive_layout.dart';
 import 'startup_refresh.dart';
+import 'tv_focusable.dart';
 
 /// Provider to track pinned groups
 final pinnedGroupsProvider = StateProvider<Set<String>>((ref) => {});
@@ -574,11 +575,11 @@ class _SidebarItemState extends State<_SidebarItem> {
   Widget build(BuildContext context) {
     final isHighlighted = _isHovered || widget.isSelected;
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
+    return TvFocusable(
+      onTap: widget.onTap,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 100),
           margin: const EdgeInsets.only(bottom: 2),
@@ -718,11 +719,11 @@ class _SidebarGroupItemState extends State<_SidebarGroupItem> {
   Widget build(BuildContext context) {
     final isHighlighted = _isHovered || widget.isSelected;
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
+    return TvFocusable(
+      onTap: widget.onTap,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 100),
           margin: const EdgeInsets.only(bottom: 2),
@@ -1018,9 +1019,8 @@ class _MobileNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return TvFocusable(
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
       child: SizedBox(
         width: 64,
         child: Column(

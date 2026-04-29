@@ -17,6 +17,7 @@ import '../../domain/entities/program.dart';
 import '../../data/compute/epg_compute.dart';
 import '../providers/epg_providers.dart';
 import '../widgets/program_details_sheet.dart';
+import '../../../../shared/widgets/tv_focusable.dart';
 
 /// Provider for the selected group in TV Guide (reads from settings)
 final tvGuideSelectedGroupProvider = Provider<String?>((ref) {
@@ -1243,11 +1244,11 @@ class _DateChipState extends State<_DateChip> {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
+    return TvFocusable(
+      onTap: widget.onTap,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
@@ -1295,11 +1296,11 @@ class _ChannelTileState extends State<_ChannelTile> {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
+    return TvFocusable(
+      onTap: widget.onTap,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
         child: Container(
           height: widget.height,
           padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -1431,11 +1432,11 @@ class _ProgramCellState extends State<_ProgramCell> {
     final isAiring = widget.program.isCurrentlyAiring;
     final hasEnded = widget.program.hasEnded;
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
+    return TvFocusable(
+      onTap: widget.onTap,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
         child: Container(
           width: widget.width,
           height: widget.height,

@@ -11,6 +11,7 @@ import '../../../playlist/domain/entities/channel.dart';
 import '../../../playlist/presentation/providers/playlist_providers.dart';
 import '../../../epg/presentation/providers/epg_providers.dart';
 import '../../domain/entities/search_result.dart';
+import '../../../../shared/widgets/tv_focusable.dart';
 
 /// Clean search screen with solid dark design
 class SearchScreen extends ConsumerStatefulWidget {
@@ -295,11 +296,12 @@ class _SearchResultTileState extends ConsumerState<_SearchResultTile> {
 
     final isProgramResult = widget.result is ProgramSearchResult;
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
+    return TvFocusable(
+      onTap: widget.onTap,
+      borderRadius: 12,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.all(12),

@@ -53,7 +53,13 @@ jobs:
       - name: Rename artifacts
         run: |
           mkdir -p artifacts
+          # The same APK works on phones, tablets and Android TV — the
+          # Leanback flags in AndroidManifest.xml make it discoverable in
+          # the TV launcher without a separate build. We publish a second
+          # copy under the AndroidTV name so users browsing GitHub Releases
+          # know it's a supported target.
           cp build/app/outputs/flutter-apk/app-release.apk artifacts/NovaTV-Android.apk
+          cp build/app/outputs/flutter-apk/app-release.apk artifacts/NovaTV-AndroidTV.apk
           cp build/app/outputs/bundle/release/app-release.aab artifacts/NovaTV-Android.aab
 
       - name: Upload Android artifacts
@@ -406,6 +412,7 @@ jobs:
           prerelease: ${{ steps.get_version.outputs.IS_TAG != 'true' }}
           files: |
             artifacts/NovaTV-Android.apk
+            artifacts/NovaTV-AndroidTV.apk
             artifacts/NovaTV-Android.aab
             artifacts/NovaTV-Linux-x64.tar.gz
             artifacts/NovaTV-Windows-x64.zip
@@ -415,7 +422,8 @@ jobs:
             ## NovaTV ${{ steps.get_version.outputs.VERSION }}
             
             ### Downloads
-            - **Android**: `NovaTV-Android.apk` (direct install) or `NovaTV-Android.aab` (Play Store)
+            - **Android (phone/tablet)**: `NovaTV-Android.apk` (direct install) or `NovaTV-Android.aab` (Play Store)
+            - **Android TV / Google TV**: `NovaTV-AndroidTV.apk` — same APK as Android, declared with Leanback so it appears in the TV launcher row. Sideload via `adb install` or your TV's Downloader app
             - **Linux**: `NovaTV-Linux-x64.tar.gz`
             - **Windows**: `NovaTV-Windows-x64.zip`
             - **macOS**: `NovaTV-macOS.zip`

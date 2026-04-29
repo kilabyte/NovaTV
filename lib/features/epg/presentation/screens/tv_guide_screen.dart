@@ -121,7 +121,10 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
   Timer? _scrollToNowRetryTimer;
 
   void _scrollToCurrentTimeWithRetry({int attempts = 0}) {
-    if (attempts >= 10) return;
+    // 50 attempts × 100ms = 5s grace period for the channel list +
+    // controllers to attach. Cold starts on slow disks were timing out
+    // at the previous 10-attempt cap (1s) and never scrolling to now.
+    if (attempts >= 50) return;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -319,13 +322,31 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       }
     });
 
-    // Listen to EPG refresh state - scroll to now when refresh completes
+    // Listen to EPG refresh state - when a refresh completes, the cached
+    // programs provider is now stale. Invalidate it so the grid re-fetches
+    // and the data actually shows up without the user having to navigate
+    // away and back. Also re-scroll to now since the data set just changed.
     ref.listen<AsyncValue<void>>(epgRefreshNotifierProvider, (previous, next) {
       if (previous?.isLoading == true && next.hasValue) {
-        // EPG refresh completed successfully - scroll to now
+        ref.invalidate(programsInRangeAllPlaylistsProvider);
         _scrollToCurrentTimeWithRetry();
       }
     });
+
+    // Re-scroll to now once the program data finishes loading on the
+    // initial view. Without this, the scroll-retry chain in initState can
+    // expire before the provider resolves on a cold start, and we end up
+    // pinned at the left edge of the grid (today 00:00) instead of "now".
+    ref.listen<AsyncValue<List<Program>>>(
+      programsInRangeAllPlaylistsProvider((start: _baseDate, end: _baseDate.add(Duration(hours: _totalHours)))),
+      (previous, next) {
+        final wasNotReady = previous == null || previous.isLoading || (previous.valueOrNull?.isEmpty ?? true);
+        final nowReady = next.hasValue && (next.value?.isNotEmpty ?? false);
+        if (wasNotReady && nowReady) {
+          _scrollToCurrentTimeWithRetry();
+        }
+      },
+    );
 
     return Scaffold(
       backgroundColor: AppColors.background,

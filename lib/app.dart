@@ -11,6 +11,7 @@ import 'config/router/routes.dart';
 import 'config/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
 import 'core/services/now_playing_service.dart';
+import 'core/services/platform_info.dart';
 import 'core/storage/index_service.dart';
 import 'core/utils/app_logger.dart';
 import 'features/settings/presentation/providers/settings_providers.dart';
@@ -95,9 +96,13 @@ class _NovaAppState extends ConsumerState<NovaApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
     final router = ref.watch(appRouterProvider);
+    final isTv = ref.watch(isAndroidTvSyncProvider);
 
     return ScreenUtilInit(
-      designSize: const Size(375, 812), // iPhone X design size
+      // 10-foot UI: TV viewers sit further from the screen, so scale the
+      // design baseline up. Keeps every layout (sized via ScreenUtil's .sp /
+      // .w / .h) bigger without per-screen if-branches.
+      designSize: isTv ? const Size(640, 360) : const Size(375, 812),
       minTextAdapt: true,
       splitScreenMode: true,
       builder: (context, child) {
@@ -115,9 +120,14 @@ class _NovaAppState extends ConsumerState<NovaApp> with WidgetsBindingObserver {
 
           // Builder for global overlays
           builder: (context, child) {
-            // Ensure text doesn't scale beyond reasonable limits
+            final mq = MediaQuery.of(context);
+            // TV: bump text scaling so default Material body sizes (~14sp)
+            // read clearly from the couch. Phone keeps its existing clamp.
+            final scaler = isTv
+                ? TextScaler.linear(mq.textScaler.scale(1.25).clamp(1.1, 1.4))
+                : TextScaler.linear(mq.textScaler.scale(1.0).clamp(0.8, 1.2));
             return MediaQuery(
-              data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(MediaQuery.of(context).textScaler.scale(1.0).clamp(0.8, 1.2))),
+              data: mq.copyWith(textScaler: scaler),
               child: child ?? const SizedBox.shrink(),
             );
           },

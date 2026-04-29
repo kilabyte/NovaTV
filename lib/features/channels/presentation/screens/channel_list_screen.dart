@@ -10,6 +10,7 @@ import '../../../epg/domain/entities/program.dart';
 import '../../../epg/presentation/providers/epg_providers.dart';
 import '../../../playlist/domain/entities/channel.dart';
 import '../../../playlist/presentation/providers/playlist_providers.dart';
+import '../../../../shared/widgets/tv_focusable.dart';
 
 /// Clean channel list with inline EPG info
 class ChannelListScreen extends ConsumerWidget {
@@ -148,14 +149,14 @@ class _ChannelRowState extends ConsumerState<_ChannelRow> {
 
     final isFavorite = ref.watch(isFavoriteProvider(widget.channel.id)).valueOrNull ?? false;
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          context.push(Routes.playerPath(widget.channel.id));
-        },
+    return TvFocusable(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        context.push(Routes.playerPath(widget.channel.id));
+      },
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 100),
           margin: const EdgeInsets.only(bottom: 2),

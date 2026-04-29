@@ -9,6 +9,7 @@ import '../../../../config/theme/app_colors.dart';
 import '../../../playlist/domain/entities/channel.dart';
 import '../../../playlist/presentation/providers/playlist_providers.dart';
 import '../../../epg/presentation/providers/epg_providers.dart';
+import '../../../../shared/widgets/tv_focusable.dart';
 
 /// Clean favorites screen with solid dark design
 class FavoritesScreen extends ConsumerWidget {
@@ -177,12 +178,13 @@ class _FavoriteChannelTileState extends ConsumerState<_FavoriteChannelTile> {
         .watch(currentProgramsProvider(widget.channel.playlistId))
         .whenData((map) => map[widget.channel.epgId.toLowerCase()]);
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        onLongPress: widget.onLongPress,
+    return TvFocusable(
+      onTap: widget.onTap,
+      onLongPress: widget.onLongPress,
+      borderRadius: 12,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.all(12),

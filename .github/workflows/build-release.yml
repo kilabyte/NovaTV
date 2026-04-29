@@ -16,6 +16,11 @@ on:
 
 env:
   FLUTTER_VERSION: '3.35.3'
+  # Opt the JS-based actions (checkout, upload-artifact, setup-java, etc.)
+  # onto Node.js 24 ahead of the June-2026 forced cutover. Suppresses the
+  # "Node.js 20 actions are deprecated" warning on every job.
+  # See: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   build-android:

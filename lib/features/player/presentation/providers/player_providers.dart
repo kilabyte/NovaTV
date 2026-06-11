@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
@@ -247,6 +248,13 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         errorMsg = 'Connection refused: Stream server is unavailable';
       } else if (error.contains('SSL') || error.contains('certificate')) {
         errorMsg = 'Security error: SSL/certificate issue with stream';
+      } else if (lowerError.contains('failed to open')) {
+        // mpv's generic open failure hides the HTTP status. Show a readable
+        // message now and probe the URL in the background to find out WHY
+        // (403 connection-limit/IP block vs 404 vs unreachable), then update
+        // the panel with the real cause.
+        errorMsg = 'Could not connect to the stream server';
+        _diagnoseStreamFailure(player);
       }
       state = state.copyWith(errorMessage: errorMsg);
     }));
@@ -453,6 +461,61 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       }
     }
     if (lastError != null) throw lastError;
+  }
+
+  /// Probe the current channel's URL after mpv reports a generic open
+  /// failure, and replace the vague error with the actual cause. IPTV
+  /// providers commonly return 403 when the account's connection limit is
+  /// already in use by another device or the IP is blocked - without this the
+  /// user just sees "failed to open" for a perfectly valid playlist.
+  Future<void> _diagnoseStreamFailure(Player player) async {
+    final channel = state.channel;
+    if (channel == null) return;
+
+    final headers = <String, dynamic>{'Range': 'bytes=0-0'};
+    if (channel.userAgent != null) headers['User-Agent'] = channel.userAgent!;
+    if (channel.referrer != null) headers['Referer'] = channel.referrer!;
+    if (channel.headers != null) headers.addAll(channel.headers!);
+
+    String? diagnosis;
+    try {
+      final response = await Dio().get<void>(
+        channel.url,
+        options: Options(
+          headers: headers,
+          responseType: ResponseType.stream,
+          validateStatus: (_) => true,
+          followRedirects: true,
+          sendTimeout: const Duration(seconds: 5),
+          receiveTimeout: const Duration(seconds: 5),
+        ),
+      );
+      diagnosis = switch (response.statusCode ?? 0) {
+        401 || 403 =>
+          'Stream server refused the connection (HTTP ${response.statusCode}). '
+          'Your provider may have reached its connection limit (is another '
+          'device or app streaming?) or blocked this IP address.',
+        404 => 'Stream not found (HTTP 404): channel may be offline',
+        >= 500 => 'Stream server error (HTTP ${response.statusCode}): the provider is having issues',
+        _ => null, // Reachable: keep the generic message, the failure is format-level.
+      };
+    } on DioException catch (e) {
+      diagnosis = switch (e.type) {
+        DioExceptionType.connectionTimeout ||
+        DioExceptionType.sendTimeout ||
+        DioExceptionType.receiveTimeout =>
+          'Stream server is not responding (connection timed out)',
+        DioExceptionType.connectionError => 'Cannot reach the stream server: check your network',
+        _ => null,
+      };
+    } catch (_) {
+      return;
+    }
+
+    // Only annotate if this failure is still the one on screen.
+    if (diagnosis != null && mounted && identical(state.player, player) && state.errorMessage != null) {
+      state = state.copyWith(errorMessage: diagnosis);
+    }
   }
 
   /// Record a buffering event and recompute the rolling-window health score.

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
@@ -20,6 +21,10 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
   final PlaylistRemoteDataSource _remoteDataSource;
   final M3UParser _m3uParser;
   static const _uuid = Uuid();
+
+  /// CancelTokens for in-flight refresh downloads keyed by playlistId, so
+  /// deletePlaylist can abort the download instead of racing it.
+  final Map<String, CancelToken> _refreshTokens = {};
 
   PlaylistRepositoryImpl({required PlaylistLocalDataSource localDataSource, required PlaylistRemoteDataSource remoteDataSource, required M3UParser m3uParser}) : _localDataSource = localDataSource, _remoteDataSource = remoteDataSource, _m3uParser = m3uParser;
 
@@ -73,10 +78,20 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
       // Create playlist model
       final playlist = PlaylistModel(id: playlistId, name: name, url: url, epgUrl: extractedEpgUrl, lastRefreshed: DateTime.now(), channelCount: channels.length, createdAt: DateTime.now());
 
-      // Save playlist and channels
-      await _localDataSource.savePlaylist(playlist);
+      // Save channels first so a failed channel write can't leave an orphan
+      // playlist claiming N channels with zero stored.
       final channelModels = channels.map((c) => ChannelModel.fromEntity(c)).toList();
       await _localDataSource.saveChannels(playlistId, channelModels);
+      try {
+        await _localDataSource.savePlaylist(playlist);
+      } on CacheException {
+        // Roll back the channel write so orphaned channels don't linger in
+        // the All Channels list.
+        try {
+          await _localDataSource.deleteChannels(playlistId);
+        } catch (_) {}
+        rethrow;
+      }
 
       return Right(playlist.toEntity());
     } on NetworkException {
@@ -106,6 +121,9 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
   @override
   Future<Either<Failure, void>> deletePlaylist(String id) async {
     try {
+      // Abort any in-flight refresh download for this playlist first so it
+      // cannot re-save channels (or surface an error) after the delete.
+      _refreshTokens.remove(id)?.cancel('Playlist deleted');
       await _localDataSource.deleteChannels(id);
       await _localDataSource.deletePlaylist(id);
       return const Right(null);
@@ -116,6 +134,12 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
 
   @override
   Future<Either<Failure, Playlist>> refreshPlaylist(String id) async {
+    final cancelToken = CancelToken();
+    // Supersede any refresh already in flight for this playlist. Leaving the
+    // old token orphaned would let two refreshes race the channel writes, and
+    // deletePlaylist would only be able to cancel the newer one.
+    _refreshTokens[id]?.cancel('Superseded by a newer refresh');
+    _refreshTokens[id] = cancelToken;
     try {
       // Get existing playlist
       final existingModel = await _localDataSource.getPlaylist(id);
@@ -124,7 +148,13 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
       }
 
       // Fetch and parse new content
-      final content = await _remoteDataSource.fetchPlaylist(existingModel.url, headers: existingModel.headers);
+      final content = await _remoteDataSource.fetchPlaylist(existingModel.url, headers: existingModel.headers, cancelToken: cancelToken);
+
+      // The playlist may have been deleted while the download was finishing;
+      // bail out before any write resurrects its channels or its row.
+      if (cancelToken.isCancelled) {
+        return const Left(CancelledFailure('Playlist refresh cancelled'));
+      }
 
       if (!_m3uParser.isValidM3U(content)) {
         // Update playlist with error
@@ -167,12 +197,31 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
         clearLastError: true,
       );
 
-      // Save updated playlist and channels
-      await _localDataSource.savePlaylist(updatedModel);
+      // Parsing in the compute isolate can take seconds; re-check that the
+      // playlist wasn't deleted during it before writing anything back.
+      if (cancelToken.isCancelled) {
+        return const Left(CancelledFailure('Playlist refresh cancelled'));
+      }
+
+      // Save channels first; only stamp the playlist as refreshed after the
+      // channel write succeeds. The previous ordering recorded a fresh
+      // lastRefreshed with no lastError even when the channel save failed,
+      // so auto-refresh would not retry for refreshIntervalHours.
       final channelModels = channelsWithFavorites.map((c) => ChannelModel.fromEntity(c)).toList();
-      await _localDataSource.saveChannels(id, channelModels);
+      try {
+        await _localDataSource.saveChannels(id, channelModels);
+      } on CacheException catch (e) {
+        final errorModel = existingModel.copyWith(lastError: 'Failed to save channels: ${e.message}');
+        try {
+          await _localDataSource.savePlaylist(errorModel);
+        } catch (_) {}
+        return Left(CacheFailure(e.message));
+      }
+      await _localDataSource.savePlaylist(updatedModel);
 
       return Right(updatedModel.toEntity());
+    } on RequestCancelledException {
+      return const Left(CancelledFailure('Playlist refresh cancelled'));
     } on NetworkException {
       return const Left(NetworkFailure());
     } on ServerException catch (e) {
@@ -183,6 +232,10 @@ class PlaylistRepositoryImpl implements PlaylistRepository {
       return Left(CacheFailure(e.message));
     } catch (e) {
       return Left(UnknownFailure('Failed to refresh playlist: $e'));
+    } finally {
+      if (identical(_refreshTokens[id], cancelToken)) {
+        _refreshTokens.remove(id);
+      }
     }
   }
 

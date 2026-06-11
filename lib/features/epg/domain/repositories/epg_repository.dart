@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:fpdart/fpdart.dart';
 
 import '../../../../core/error/failures.dart';
@@ -7,8 +8,10 @@ import '../entities/program.dart';
 
 /// Repository interface for EPG operations
 abstract class EpgRepository {
-  /// Fetch and store EPG data from a URL
-  Future<Either<Failure, EpgData>> fetchAndStoreEpg(String playlistId, String url);
+  /// Fetch and store EPG data from a URL.
+  /// Pass [cancelToken] to allow aborting the download (e.g. when the
+  /// playlist is deleted mid-refresh).
+  Future<Either<Failure, EpgData>> fetchAndStoreEpg(String playlistId, String url, {CancelToken? cancelToken});
 
   /// Get all programs for a playlist
   Future<Either<Failure, List<Program>>> getPrograms(String playlistId);

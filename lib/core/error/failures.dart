@@ -36,6 +36,13 @@ class NetworkFailure extends Failure {
   const NetworkFailure([super.message = 'No internet connection']);
 }
 
+/// Failure for a deliberately cancelled request (e.g. playlist deleted while
+/// its refresh was downloading). Not a user-facing error: callers should
+/// silently drop the operation instead of surfacing a toast.
+class CancelledFailure extends Failure {
+  const CancelledFailure([super.message = 'Request cancelled']);
+}
+
 /// Failure when validation fails
 class ValidationFailure extends Failure {
   const ValidationFailure(super.message, {super.code});

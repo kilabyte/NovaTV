@@ -5,7 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce/hive.dart';
 
+import '../../../../core/error/failures.dart';
 import '../../../../core/storage/hive_storage.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../../data/datasources/playlist_local_data_source.dart';
 import '../../data/datasources/playlist_remote_data_source.dart';
 import '../../data/parsers/m3u_parser.dart';
@@ -115,6 +117,15 @@ final channelsByPlaylistProvider = FutureProvider.family<List<Channel>, String>(
 /// Provider for channel search
 final searchQueryProvider = StateProvider.autoDispose<String>((ref) => '');
 
+/// EPG-id -> Channel lookup map, cached off [allChannelsProvider] so each
+/// debounced search query doesn't re-read and re-scan the entire channel box
+/// just to map program results back to channels. Keys are lowercased to
+/// match the normalization applied when programs are indexed.
+final channelByEpgIdProvider = FutureProvider<Map<String, Channel>>((ref) async {
+  final channels = await ref.watch(allChannelsProvider.future);
+  return {for (final c in channels) c.epgId.toLowerCase(): c};
+});
+
 /// Combined search results provider that searches both channels and EPG programs
 final searchResultsProvider = FutureProvider.autoDispose<List<SearchResult>>((ref) async {
   final query = ref.watch(searchQueryProvider);
@@ -136,32 +147,28 @@ final searchResultsProvider = FutureProvider.autoDispose<List<SearchResult>>((re
   // Search channels first
   final channelUseCase = ref.watch(searchChannelsUseCaseProvider);
   final channelResult = await channelUseCase(query);
-  channelResult.fold((failure) {}, (channels) {
-    for (final channel in channels) {
-      results.add(ChannelSearchResult(channel));
-      seenChannelIds.add(channel.id);
-    }
-  });
+  channelResult.fold(
+    (failure) => AppLogger.warning('Channel search failed: ${failure.message}'),
+    (channels) {
+      for (final channel in channels) {
+        results.add(ChannelSearchResult(channel));
+        seenChannelIds.add(channel.id);
+      }
+    },
+  );
 
   // Search EPG programs
   final epgLocalDataSource = ref.watch(epgLocalDataSourceProvider);
   final playlistRepository = ref.watch(playlistRepositoryProvider);
 
+  // Cached EPG-id map; avoids re-hydrating every channel per query.
+  final channelByEpgId = await ref.watch(channelByEpgIdProvider.future);
+
   // Get all playlists to search their EPG data
   final playlistsResult = await playlistRepository.getPlaylists();
-  await playlistsResult.fold((failure) async {}, (playlists) async {
-    // Get all channels for mapping program results
-    final allChannelsResult = await playlistRepository.getAllChannels();
-    final allChannels = allChannelsResult.fold((failure) => <Channel>[], (channels) => channels);
-
-    // Map EPG channel ID → Channel for quick lookup. Keys lowercased to match
-    // the normalization applied when programs are written to the index, so
-    // mixed-case tvg-ids don't silently miss.
-    final channelByEpgId = <String, Channel>{};
-    for (final channel in allChannels) {
-      channelByEpgId[channel.epgId.toLowerCase()] = channel;
-    }
-
+  await playlistsResult.fold((failure) async {
+    AppLogger.warning('Playlist lookup for EPG search failed: ${failure.message}');
+  }, (playlists) async {
     for (final playlist in playlists) {
       final programs = await epgLocalDataSource.searchPrograms(playlist.id, query);
 
@@ -244,7 +251,11 @@ class PlaylistNotifier extends StateNotifier<AsyncValue<List<Playlist>>> {
 
       final effectiveEpgUrl = playlist.epgUrl;
       if (effectiveEpgUrl != null && effectiveEpgUrl.isNotEmpty) {
-        _ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist.id, effectiveEpgUrl);
+        // Fire-and-forget with an error guard, matching refreshPlaylist: a
+        // non-Exception Error from the EPG fetch/parse would otherwise be an
+        // unhandled async exception.
+        // Background EPG refresh errors are surfaced by the EPG notifier itself.
+        Future(() => _ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist.id, effectiveEpgUrl)).catchError((Object _) => false);
       }
     });
   }
@@ -254,21 +265,28 @@ class PlaylistNotifier extends StateNotifier<AsyncValue<List<Playlist>>> {
     final useCase = _ref.read(refreshPlaylistUseCaseProvider);
     final result = await Future(() => useCase(playlistId));
 
-    result.fold((failure) => throw Exception(failure.message), (playlist) {
+    result.fold((failure) {
+      // A cancelled refresh (playlist deleted mid-download) is dropped
+      // silently; throwing here would surface an error toast for it.
+      if (failure is CancelledFailure) return;
+      throw Exception(failure.message);
+    }, (playlist) {
       _loadPlaylists();
       _invalidateChannelProviders();
       _ref.invalidate(channelsByPlaylistProvider(playlistId));
 
       final epgUrl = playlist.epgUrl;
       if (epgUrl != null && epgUrl.isNotEmpty) {
-        Future(() => _ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist.id, epgUrl)).catchError((Object _) {
-          // Background EPG refresh errors are surfaced by the EPG notifier itself.
-        });
+        // Background EPG refresh errors are surfaced by the EPG notifier itself.
+        Future(() => _ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist.id, epgUrl)).catchError((Object _) => false);
       }
     });
   }
 
   Future<void> deletePlaylist(String playlistId) async {
+    // Abort this playlist's in-flight EPG download; the repository cancels
+    // the playlist download itself inside deletePlaylist.
+    _ref.read(epgRefreshNotifierProvider.notifier).cancelRefresh(playlistId);
     final useCase = _ref.read(deletePlaylistUseCaseProvider);
     final result = await useCase(playlistId);
 
@@ -285,6 +303,10 @@ class PlaylistNotifier extends StateNotifier<AsyncValue<List<Playlist>>> {
   }
 
   void _invalidateChannelProviders() {
+    // playlistsProvider is a separate cached source of truth consumed by the
+    // TV Guide fan-out and startup refresh; without this invalidation it
+    // would serve the startup-time playlist list for the app's lifetime.
+    _ref.invalidate(playlistsProvider);
     _ref.invalidate(allChannelsProvider);
     _ref.invalidate(channelGroupsProvider);
     _ref.invalidate(filteredChannelsProvider);
@@ -312,9 +334,11 @@ class FavoriteNotifier extends StateNotifier<AsyncValue<void>> {
     final result = await useCase(channelId);
 
     state = result.fold((failure) => AsyncValue.error(failure.message, StackTrace.current), (_) {
+      // Only the favorites-derived providers need to recompute: star UI
+      // everywhere reads favoriteIdsProvider/isFavoriteProvider. Invalidating
+      // allChannels/filteredChannels here re-hydrated and re-sorted the whole
+      // channel box on every star tap for no visible benefit.
       _ref.invalidate(favoriteChannelsProvider);
-      _ref.invalidate(allChannelsProvider);
-      _ref.invalidate(filteredChannelsProvider);
       return const AsyncValue.data(null);
     });
   }
@@ -336,11 +360,6 @@ final favoriteIdsProvider = FutureProvider.autoDispose<Set<String>>((ref) async 
 final isFavoriteProvider = FutureProvider.autoDispose.family<bool, String>((ref, channelId) async {
   final ids = await ref.watch(favoriteIdsProvider.future);
   return ids.contains(channelId);
-});
-
-/// Toggle favorite for a channel (returns a provider that triggers the toggle)
-final toggleFavoriteProvider = Provider.family<void, String>((ref, channelId) {
-  ref.read(favoriteNotifierProvider.notifier).toggleFavorite(channelId);
 });
 
 /// Recently watched channels tracking
@@ -377,9 +396,16 @@ class RecentlyWatchedNotifier extends StateNotifier<List<String>> {
     }
   }
 
-  /// Save to Hive storage
+  /// Save to Hive storage. Retries the box open if the initial load failed
+  /// (left _box null) and logs instead of throwing: callers fire-and-forget
+  /// this, so a failed put must not become an unhandled async exception.
   Future<void> _saveToHive() async {
-    await _box?.put(_key, state);
+    try {
+      _box ??= await safeOpenBox<dynamic>(_boxName);
+      await _box?.put(_key, state);
+    } catch (e) {
+      AppLogger.warning('Failed to save recently watched: $e');
+    }
   }
 
   /// Add a channel to recently watched (moves to front if already exists).

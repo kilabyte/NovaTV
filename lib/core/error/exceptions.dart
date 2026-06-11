@@ -44,6 +44,16 @@ class NetworkException extends AppException {
   String toString() => 'NetworkException: $message';
 }
 
+/// Exception thrown when an in-flight request was deliberately cancelled
+/// (e.g. its playlist was deleted). Callers should drop the operation
+/// silently rather than surface an error to the user.
+class RequestCancelledException extends AppException {
+  const RequestCancelledException([super.message = 'Request cancelled']);
+
+  @override
+  String toString() => 'RequestCancelledException: $message';
+}
+
 /// Exception thrown when validation fails
 class ValidationException extends AppException {
   const ValidationException(super.message, {super.code});

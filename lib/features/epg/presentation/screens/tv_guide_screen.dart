@@ -13,8 +13,8 @@ import '../../../../config/theme/app_colors.dart';
 import '../../../playlist/domain/entities/channel.dart';
 import '../../../playlist/presentation/providers/playlist_providers.dart';
 import '../../../settings/presentation/providers/settings_providers.dart';
-import '../../domain/entities/program.dart';
 import '../../data/compute/epg_compute.dart';
+import '../../domain/entities/program.dart';
 import '../providers/epg_providers.dart';
 import '../widgets/program_details_sheet.dart';
 import '../../../../shared/widgets/tv_focusable.dart';
@@ -59,8 +59,11 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
   Future<Map<String, List<Program>>>? _cachedProgramsFuture;
   String? _lastProgramsKey;
 
-  // Current scroll offset for sticky text alignment (works on all platforms)
-  double _currentScrollOffset = 0.0;
+  // Current scroll offset for sticky text alignment (works on all platforms).
+  // A ValueNotifier instead of setState: only the time header and the program
+  // rows listen, so a horizontal fling no longer rebuilds the whole screen
+  // (header chrome, date chips, channel column) on every frame.
+  final ValueNotifier<double> _scrollOffset = ValueNotifier<double>(0.0);
 
   @override
   void initState() {
@@ -107,6 +110,10 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
         for (final playlist in playlists) {
           if (!mounted) return;
           if (playlist.epgUrl == null || playlist.epgUrl!.isEmpty) continue;
+          // The provider is a non-autoDispose family, so its first answer is
+          // cached for the app's lifetime; invalidate so validity (a 24h
+          // fetchedAt check) is re-evaluated on every guide open.
+          ref.invalidate(hasValidEpgDataProvider(playlist.id));
           final hasValid = await ref.read(hasValidEpgDataProvider(playlist.id).future);
           if (hasValid) continue;
           await ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist.id, playlist.epgUrl!);
@@ -144,78 +151,35 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     });
   }
 
-  /// Process programs using compute isolate - called once per data change
+  /// Process programs using compute isolate - called once per data change.
+  /// Program/Channel entities are plain immutable objects, so they cross the
+  /// isolate boundary directly; the previous implementation built a JSON map
+  /// for every program and re-parsed the result on the main isolate, paying
+  /// two full dataset copies right when the guide opened.
   Future<Map<String, List<Program>>> _processProgramsWithCompute(List<Program> programs, List<Channel> channels, DateTime startTime, DateTime endTime) async {
     if (programs.isEmpty || channels.isEmpty) {
       return <String, List<Program>>{};
     }
 
-    // Use the same logic as programsByChannelProvider but call compute directly
-    // This avoids the provider re-evaluation issue
     final useCompute = programs.length > 1000;
 
     if (kDebugMode) {
       debugPrint('EPG: TV Guide - processing ${programs.length} programs, ${channels.length} channels (useCompute: $useCompute)');
     }
 
+    final args = GuideGroupArgs(programs: programs, channels: channels, startTime: startTime, endTime: endTime);
+
     try {
       if (useCompute) {
-        // Import the compute function and use it directly
-        final channelsJson = channels.map((c) => channelToJson(c)).toList();
-        final programsJson = programs.map((p) {
-          return {'id': p.id, 'channelId': p.channelId, 'title': p.title, 'start': p.start.millisecondsSinceEpoch, 'end': p.end.millisecondsSinceEpoch, 'subtitle': p.subtitle, 'description': p.description, 'category': p.category, 'iconUrl': p.iconUrl, 'episodeNum': p.episodeNum, 'rating': p.rating, 'isNew': p.isNew, 'isLive': p.isLive, 'isPremiere': p.isPremiere};
-        }).toList();
-
-        final result = await compute(groupProgramsByChannel, GroupProgramsParams(programsJson: programsJson, channelsJson: channelsJson, startTimeMs: startTime.millisecondsSinceEpoch, endTimeMs: endTime.millisecondsSinceEpoch)).timeout(
+        return await compute(groupProgramsForGuide, args).timeout(
           const Duration(seconds: 30),
           onTimeout: () {
             throw TimeoutException('Program grouping timed out');
           },
         );
-
-        // Convert result back to Program objects
-        final map = <String, List<Program>>{};
-        for (final entry in result.entries) {
-          map[entry.key] = entry.value.map((json) {
-            return Program(id: json['id'] as String, channelId: json['channelId'] as String, title: json['title'] as String, start: DateTime.fromMillisecondsSinceEpoch(json['start'] as int), end: DateTime.fromMillisecondsSinceEpoch(json['end'] as int), subtitle: json['subtitle'] as String?, description: json['description'] as String?, category: json['category'] as String?, iconUrl: json['iconUrl'] as String?, episodeNum: json['episodeNum'] as String?, rating: json['rating'] as String?, isNew: json['isNew'] as bool? ?? false, isLive: json['isLive'] as bool? ?? false, isPremiere: json['isPremiere'] as bool? ?? false);
-          }).toList();
-        }
-
-        if (kDebugMode) {
-          debugPrint('EPG: TV Guide - completed, ${map.length} channels with programs');
-        }
-
-        return map;
-      } else {
-        // Small dataset - process synchronously
-        final map = <String, List<Program>>{};
-        final epgIdToChannelId = <String, String>{};
-
-        for (final channel in channels) {
-          final epgId = channel.epgId;
-          epgIdToChannelId[epgId] = channel.id;
-          if (channel.tvgId != null && channel.tvgId != epgId) {
-            epgIdToChannelId[channel.tvgId!] = channel.id;
-          }
-          epgIdToChannelId[channel.id] = channel.id;
-        }
-
-        final filteredPrograms = programs.where((p) => p.end.isAfter(startTime) && p.start.isBefore(endTime)).toList();
-
-        for (final program in filteredPrograms) {
-          final matchedChannelId = epgIdToChannelId[program.channelId];
-          if (matchedChannelId != null) {
-            map.putIfAbsent(matchedChannelId, () => []).add(program);
-          }
-        }
-
-        // Sort programs by start time for each channel
-        for (final key in map.keys) {
-          map[key]!.sort((a, b) => a.start.compareTo(b.start));
-        }
-
-        return map;
       }
+      // Small dataset - process synchronously
+      return groupProgramsForGuide(args);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('EPG: TV Guide - error processing: $e');
@@ -257,19 +221,12 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     }
   }
 
-  /// Scroll offset listener for sticky text alignment on all platforms
-  /// Only triggers rebuild if offset changes significantly (reduces rebuilds)
+  /// Scroll offset listener for sticky text alignment on all platforms.
+  /// Updates the ValueNotifier only; ValueListenableBuilders on the time
+  /// header and program rows rebuild, nothing else does.
   void _onScrollOffsetChanged() {
     if (!mounted || !_programGridController.hasClients) return;
-
-    final newOffset = _programGridController.offset;
-    // Only rebuild if offset changed by more than 16 pixels (threshold)
-    // Higher threshold = fewer rebuilds = better performance
-    if ((newOffset - _currentScrollOffset).abs() > 16.0) {
-      setState(() {
-        _currentScrollOffset = newOffset;
-      });
-    }
+    _scrollOffset.value = _programGridController.offset;
   }
 
   /// Debounced scroll handler to reduce rebuilds during fast scrolling
@@ -299,6 +256,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
   void dispose() {
     _scrollDebounceTimer?.cancel();
     _scrollToNowRetryTimer?.cancel();
+    _scrollOffset.dispose();
     _timeHeaderController.dispose();
     _programGridController.dispose();
     _channelColumnController.dispose();
@@ -312,8 +270,29 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     final selectedDate = ref.watch(selectedDateProvider);
     final selectedGroup = ref.watch(tvGuideSelectedGroupProvider);
     final groupsAsync = ref.watch(channelGroupsProvider);
+    // Rebuild once per minute so the airing highlight, progress fills, LIVE
+    // badges, and current-hour header keep advancing while the guide sits
+    // idle (typical on a TV). Without this the indicators freeze at the
+    // last interaction.
+    ref.watch(minuteTickProvider);
     // Use baseDate for the full multi-day grid starting from yesterday
     final startTime = _baseDate;
+
+    // Roll _baseDate forward when the day changes so a guide left open past
+    // midnight doesn't show yesterday as the first chip or lose a day of
+    // lookahead from its fetch window.
+    ref.listen<AsyncValue<DateTime>>(minuteTickProvider, (previous, next) {
+      final now = next.valueOrNull ?? DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      if (today != _baseDate) {
+        setState(() {
+          _baseDate = today;
+          _cachedProgramsFuture = null;
+          _lastProgramsKey = null;
+        });
+        _scrollToCurrentTimeWithRetry();
+      }
+    });
 
     // Listen to goToNowTrigger to scroll to current time when triggered
     // This handles: navigation to Guide tab, EPG refresh, playlist refresh
@@ -323,12 +302,17 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       }
     });
 
-    // Listen to EPG refresh state - when a refresh completes, the cached
-    // programs provider is now stale. Invalidate it so the grid re-fetches
-    // and the data actually shows up without the user having to navigate
-    // away and back. Also re-scroll to now since the data set just changed.
+    // Listen to EPG refresh state - when a refresh batch completes, the
+    // cached programs provider is now stale. Invalidate it so the grid
+    // re-fetches and the data actually shows up without the user having to
+    // navigate away and back. Also drop the locally cached grouping future:
+    // its length/first-id key can't detect content-only EPG updates. Runs on
+    // error completions too, since a partially failed batch may still have
+    // refreshed other playlists.
     ref.listen<AsyncValue<void>>(epgRefreshNotifierProvider, (previous, next) {
-      if (previous?.isLoading == true && next.hasValue) {
+      if (previous?.isLoading == true && !next.isLoading) {
+        _cachedProgramsFuture = null;
+        _lastProgramsKey = null;
         ref.invalidate(programsInRangeAllPlaylistsProvider);
         _scrollToCurrentTimeWithRetry();
       }
@@ -734,7 +718,10 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
               physics: const ClampingScrollPhysics(),
               child: SizedBox(
                 width: totalWidth,
-                child: Row(children: _buildTimeHeaderItems(startTime, dateFormat, timeFormat)),
+                child: ValueListenableBuilder<double>(
+                  valueListenable: _scrollOffset,
+                  builder: (context, offset, _) => Row(children: _buildTimeHeaderItems(startTime, dateFormat, timeFormat, offset)),
+                ),
               ),
             ),
           ),
@@ -745,11 +732,11 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
 
   /// Build time header items with viewport optimization
   /// Only renders full content for visible items, uses lightweight placeholders for others
-  List<Widget> _buildTimeHeaderItems(DateTime startTime, DateFormat dateFormat, DateFormat timeFormat) {
+  List<Widget> _buildTimeHeaderItems(DateTime startTime, DateFormat dateFormat, DateFormat timeFormat, double scrollOffset) {
     final screenWidth = MediaQuery.of(context).size.width - _channelColumnWidth;
     final viewportBuffer = screenWidth; // Buffer for smooth scrolling
-    final viewportStart = _currentScrollOffset - viewportBuffer;
-    final viewportEnd = _currentScrollOffset + screenWidth + viewportBuffer;
+    final viewportStart = scrollOffset - viewportBuffer;
+    final viewportEnd = scrollOffset + screenWidth + viewportBuffer;
 
     final now = DateTime.now();
 
@@ -859,7 +846,13 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
                 decoration: BoxDecoration(
                   border: Border(bottom: BorderSide(color: AppColors.border.withValues(alpha: 0.5))),
                 ),
-                child: _buildProgramRow(context, channel, programs, startTime, endTime),
+                // Listen to the scroll offset per row so horizontal scrolling
+                // rebuilds only the visible rows (viewport culling + sticky
+                // text), not the whole screen.
+                child: ValueListenableBuilder<double>(
+                  valueListenable: _scrollOffset,
+                  builder: (context, offset, _) => _buildProgramRow(context, channel, programs, startTime, endTime, offset),
+                ),
               ),
             );
           },
@@ -868,25 +861,20 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     );
   }
 
-  Widget _buildProgramRow(BuildContext context, Channel channel, List<Program> programs, DateTime gridStart, DateTime gridEnd) {
+  Widget _buildProgramRow(BuildContext context, Channel channel, List<Program> programs, DateTime gridStart, DateTime gridEnd, double scrollOffset) {
     // PERFORMANCE: Use Stack + Positioned so off-viewport cells are omitted
     // from the widget tree entirely instead of held as SizedBox placeholders.
     // For a 7-day/N-channel guide this drops a row's widget count from ~350
     // to ~8 (just the visible window + gaps).
     final screenWidth = MediaQuery.of(context).size.width - _channelColumnWidth;
     final viewportBuffer = screenWidth;
-    final viewportStart = _currentScrollOffset - viewportBuffer;
-    final viewportEnd = _currentScrollOffset + screenWidth + viewportBuffer;
+    final viewportStart = scrollOffset - viewportBuffer;
+    final viewportEnd = scrollOffset + screenWidth + viewportBuffer;
     final totalWidth = _totalHours * _hourWidth;
 
-    // Filter to programs that overlap the grid; list is already sorted.
-    final visiblePrograms = <Program>[];
-    for (final program in programs) {
-      if (program.end.isAfter(gridStart) && program.start.isBefore(gridEnd)) {
-        visiblePrograms.add(program);
-      }
-      if (program.start.isAfter(gridEnd)) break;
-    }
+    // The grouping step already filtered to programs overlapping the grid
+    // window and sorted them, so no per-rebuild rescan/copy is needed here.
+    final visiblePrograms = programs;
 
     if (visiblePrograms.isEmpty) {
       return Container(
@@ -901,10 +889,11 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     final children = <Widget>[];
     var lastEnd = gridStart;
 
-    void addIfVisible(double left, double width, Widget Function() builder) {
+    void addIfVisible(double left, double width, Widget Function() builder, {Key? key}) {
       final right = left + width;
       if (right < viewportStart || left > viewportEnd) return;
       children.add(Positioned(
+        key: key,
         left: left,
         top: 0,
         width: width,
@@ -936,15 +925,21 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       final hiddenLeftWidth = program.start.isBefore(gridStart)
           ? _durationToWidth(gridStart.difference(program.start))
           : 0.0;
-      addIfVisible(cellLeft, cellWidth, () => _ProgramCell(
-            program: program,
-            width: cellWidth,
-            height: _rowHeight,
-            onTap: () => _showProgramDetails(context, program, channel),
-            programStartOffset: cellLeft,
-            hiddenLeftWidth: hiddenLeftWidth,
-            scrollOffset: _currentScrollOffset,
-          ));
+      // Key by program id so element state (hover, text offset) cannot
+      // migrate to a different program as the visibility window shifts.
+      addIfVisible(
+          cellLeft,
+          cellWidth,
+          () => _ProgramCell(
+                program: program,
+                width: cellWidth,
+                height: _rowHeight,
+                onTap: () => _showProgramDetails(context, program, channel),
+                programStartOffset: cellLeft,
+                hiddenLeftWidth: hiddenLeftWidth,
+                scrollOffset: scrollOffset,
+              ),
+          key: ValueKey(program.id));
 
       // Track the furthest-right end so we don't double-paint gaps inside
       // overlapping ranges.
@@ -993,13 +988,20 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
 
   void _showDatePicker(BuildContext context) async {
     final selectedDate = ref.read(selectedDateProvider);
-    final now = DateTime.now();
+
+    // Clamp to the grid's actual range: it starts at _baseDate and covers
+    // _daysToShow days, so past dates (or dates beyond the chips) would
+    // select a day the grid cannot display.
+    final lastDate = _baseDate.add(const Duration(days: _daysToShow - 1));
+    final initialDate = selectedDate.isBefore(_baseDate)
+        ? _baseDate
+        : (selectedDate.isAfter(lastDate) ? lastDate : selectedDate);
 
     final date = await showDatePicker(
       context: context,
-      initialDate: selectedDate,
-      firstDate: now.subtract(const Duration(days: 7)),
-      lastDate: now.add(const Duration(days: 7)),
+      initialDate: initialDate,
+      firstDate: _baseDate,
+      lastDate: lastDate,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -1012,6 +1014,9 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
 
     if (date != null) {
       ref.read(selectedDateProvider.notifier).state = date;
+      // Move the viewport too; updating the provider alone only changed the
+      // highlighted chip.
+      _scrollToDate(date);
     }
   }
 
@@ -1380,6 +1385,15 @@ class _ProgramCellState extends State<_ProgramCell> {
 
   // Cache DateFormat to avoid recreating on every build
   static final DateFormat _timeFormat = DateFormat.jm();
+
+  @override
+  void didUpdateWidget(covariant _ProgramCell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Don't carry a text offset computed for a different program.
+    if (oldWidget.program.id != widget.program.id) {
+      _lastCalculatedOffset = 0.0;
+    }
+  }
 
   // Threshold for offset changes to trigger rebuild (pixels)
   // Higher threshold = fewer rebuilds = better performance

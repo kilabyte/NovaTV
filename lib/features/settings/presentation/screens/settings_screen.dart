@@ -387,20 +387,26 @@ class SettingsScreen extends ConsumerWidget {
     final playlistList = playlists.valueOrNull;
 
     if (playlistList != null && playlistList.isNotEmpty) {
+      // Capture the notifiers before the async work starts: this screen can
+      // be disposed mid-refresh (tab navigation) and using WidgetRef then
+      // throws, stranding the toast on 'Refreshing...'.
+      final playlistNotifier = ref.read(playlistNotifierProvider.notifier);
+      final refreshState = ref.read(refreshStateProvider.notifier);
+
       // Show toast for refresh status
-      ref.read(refreshStateProvider.notifier).startPlaylistRefresh();
+      refreshState.startPlaylistRefresh();
 
       // Refresh all playlists
       Future(() async {
         bool success = true;
         for (final playlist in playlistList) {
           try {
-            await ref.read(playlistNotifierProvider.notifier).refreshPlaylist(playlist.id);
+            await playlistNotifier.refreshPlaylist(playlist.id);
           } catch (e) {
             success = false;
           }
         }
-        ref.read(refreshStateProvider.notifier).completePlaylistRefresh(success: success);
+        refreshState.completePlaylistRefresh(success: success);
       });
     } else {
       _showSnackBar(context, 'No playlists to refresh', Icons.warning_rounded, isWarning: true);
@@ -409,20 +415,34 @@ class SettingsScreen extends ConsumerWidget {
 
   void _refreshEpg(BuildContext context, WidgetRef ref) {
     HapticFeedback.lightImpact();
-    final playlists = ref.read(playlistNotifierProvider);
-    final playlist = playlists.valueOrNull?.firstOrNull;
+    final playlists = ref.read(playlistNotifierProvider).valueOrNull ?? const [];
+    final withEpg = playlists.where((p) => p.epgUrl != null && p.epgUrl!.isNotEmpty).toList();
 
-    if (playlist?.epgUrl != null) {
+    if (withEpg.isNotEmpty) {
+      // Capture the notifiers before the async work starts (see
+      // _refreshPlaylists): the screen can be disposed mid-refresh.
+      final epgNotifier = ref.read(epgRefreshNotifierProvider.notifier);
+      final refreshState = ref.read(refreshStateProvider.notifier);
+
       // Show toast for refresh status
-      ref.read(refreshStateProvider.notifier).startEpgRefresh();
+      refreshState.startEpgRefresh();
 
+      // Refresh every playlist that has an EPG URL, mirroring the TV Guide's
+      // own refresh action.
       Future(() async {
-        try {
-          await ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(playlist!.id, playlist.epgUrl!);
-          ref.read(refreshStateProvider.notifier).completeEpgRefresh(success: true);
-        } catch (e) {
-          ref.read(refreshStateProvider.notifier).completeEpgRefresh(success: false);
+        bool success = true;
+        for (final playlist in withEpg) {
+          try {
+            // refreshEpg never throws; it reports this playlist's outcome via
+            // the returned bool (reading the notifier's batch state here could
+            // race a concurrent startup refresh and miss a failure).
+            final ok = await epgNotifier.refreshEpg(playlist.id, playlist.epgUrl!);
+            if (!ok) success = false;
+          } catch (e) {
+            success = false;
+          }
         }
+        refreshState.completeEpgRefresh(success: success);
       });
     } else {
       _showSnackBar(context, 'No EPG URL configured in playlists', Icons.warning_rounded, isWarning: true);

@@ -4,6 +4,10 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
+// screen_retriever ships as a window_manager dependency; used to validate
+// restored window positions against attached displays.
+// ignore: depend_on_referenced_packages
+import 'package:screen_retriever/screen_retriever.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../constants/storage_keys.dart';
@@ -57,6 +61,12 @@ class WindowService with WindowListener {
       // Add listener for window changes
       windowManager.addListener(this);
 
+      // Intercept close so onWindowClose can flush the final geometry save
+      // before the window (and the engine) is destroyed. Set only after the
+      // listener is registered, otherwise a failed init would leave the
+      // window unclosable.
+      await windowManager.setPreventClose(true);
+
       // Show window after setup
       await windowManager.show();
       await windowManager.focus();
@@ -108,11 +118,11 @@ class WindowService with WindowListener {
       final y = _settingsBox!.get(StorageKeys.windowY) as double?;
       final isMaximized = _settingsBox!.get(StorageKeys.windowMaximized) as bool? ?? false;
 
-      if (width != null && height != null) {
-        // Validate dimensions are reasonable
-        final validWidth = width.clamp(_minWidth, 4000.0);
-        final validHeight = height.clamp(_minHeight, 3000.0);
+      // Validate dimensions are reasonable
+      final validWidth = (width ?? _defaultWidth).clamp(_minWidth, 4000.0);
+      final validHeight = (height ?? _defaultHeight).clamp(_minHeight, 3000.0);
 
+      if (width != null && height != null) {
         await windowManager.setSize(Size(validWidth, validHeight));
         AppLogger.debug('WindowService: Restored size: ${validWidth}x$validHeight');
       } else {
@@ -121,8 +131,11 @@ class WindowService with WindowListener {
         AppLogger.debug('WindowService: Using default size');
       }
 
-      // Restore position if available and valid
-      if (x != null && y != null && x >= 0 && y >= 0) {
+      // Restore position if it still lands on an attached display. Negative
+      // coordinates are valid (monitors left of/above the primary), and
+      // positive ones can be stale (detached monitor), so check against
+      // actual display bounds rather than the coordinate sign.
+      if (x != null && y != null && await _isOnAnyDisplay(x, y, validWidth, validHeight)) {
         await windowManager.setPosition(Offset(x, y));
         AppLogger.debug('WindowService: Restored position: ($x, $y)');
       } else {
@@ -141,6 +154,27 @@ class WindowService with WindowListener {
       // Fall back to defaults
       await windowManager.setSize(const Size(_defaultWidth, _defaultHeight));
       await windowManager.center();
+    }
+  }
+
+  /// True when the saved window rect intersects any currently attached
+  /// display, so we never restore a window fully off-screen.
+  Future<bool> _isOnAnyDisplay(double x, double y, double width, double height) async {
+    try {
+      final displays = await screenRetriever.getAllDisplays();
+      if (displays.isEmpty) return true;
+      final windowRect = Rect.fromLTWH(x, y, width, height);
+      for (final display in displays) {
+        final position = display.visiblePosition ?? Offset.zero;
+        final size = display.visibleSize ?? display.size;
+        final displayRect = Rect.fromLTWH(position.dx, position.dy, size.width, size.height);
+        if (windowRect.overlaps(displayRect)) return true;
+      }
+      return false;
+    } catch (e) {
+      AppLogger.warning('WindowService: display lookup failed: $e');
+      // Fail open: a slightly wrong position beats losing it every launch.
+      return true;
     }
   }
 
@@ -191,10 +225,13 @@ class WindowService with WindowListener {
   void onWindowUnmaximize() => _scheduleSave();
 
   @override
-  void onWindowClose() {
-    // Flush pending save synchronously on close; we may not get another tick.
+  void onWindowClose() async {
+    // setPreventClose(true) holds the window open so the awaits inside
+    // _saveWindowSettings can complete; without it the engine dies before
+    // the pending platform-channel calls resume and the save is lost.
     _saveDebounce?.cancel();
-    _saveWindowSettings();
+    await _saveWindowSettings();
+    await windowManager.destroy();
   }
 
   /// Clean up

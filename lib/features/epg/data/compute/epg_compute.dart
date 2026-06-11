@@ -1,77 +1,71 @@
 import '../../../playlist/domain/entities/channel.dart';
 import '../../domain/entities/program.dart';
 
-/// Parameters for groupProgramsByChannel compute function
-class GroupProgramsParams {
-  final List<Map<String, dynamic>> programsJson;
-  final List<Map<String, dynamic>> channelsJson;
-  final int startTimeMs;
-  final int endTimeMs;
+/// Arguments for [groupProgramsForGuide]. Entities are plain immutable Dart
+/// objects, so they cross the compute-isolate boundary as-is with no JSON
+/// round-trip on the main isolate.
+class GuideGroupArgs {
+  final List<Program> programs;
+  final List<Channel> channels;
+  final DateTime startTime;
+  final DateTime endTime;
 
-  GroupProgramsParams({required this.programsJson, required this.channelsJson, required this.startTimeMs, required this.endTimeMs});
+  const GuideGroupArgs({required this.programs, required this.channels, required this.startTime, required this.endTime});
 }
 
-/// Top-level function for grouping programs by channel using compute isolate
-/// This processes heavy EPG data off the main thread to prevent UI freezing
+/// Group programs by channel id for the TV Guide grid. Top-level so it can
+/// run in a compute isolate; also used directly for small datasets.
+///
+/// Two behaviors that a naive grouping gets wrong:
+/// - The epg-id mapping is one-to-many: playlists routinely list HD/SD/FHD
+///   variants sharing one tvg-id, and a last-writer-wins map left every
+///   sibling variant with an empty guide row.
+/// - tvg-shift is applied per channel: timeshifted +1/+2 variants reuse the
+///   base channel's EPG with programme times offset by the shift amount, so
+///   range-filtering happens after the shift.
 @pragma('vm:entry-point')
-Map<String, List<Map<String, dynamic>>> groupProgramsByChannel(GroupProgramsParams params) {
-  final programsJson = params.programsJson;
-  final channelsJson = params.channelsJson;
-  final startTimeMs = params.startTimeMs;
-  final endTimeMs = params.endTimeMs;
+Map<String, List<Program>> groupProgramsForGuide(GuideGroupArgs args) {
+  final epgIdToChannelIds = <String, List<String>>{};
+  final shiftByChannelId = <String, int>{};
 
-  // Reconstruct channels from JSON (for serialization)
-  final channels = channelsJson.map((json) {
-    return Channel(id: json['id'] as String, name: json['name'] as String, url: json['url'] as String, playlistId: json['playlistId'] as String, tvgId: json['tvgId'] as String?, tvgName: json['tvgName'] as String?, logoUrl: json['logoUrl'] as String?, group: json['group'] as String?, language: json['language'] as String?, country: json['country'] as String?, tvgShift: json['tvgShift'] as int?, userAgent: json['userAgent'] as String?, referrer: json['referrer'] as String?, headers: json['headers'] != null ? Map<String, String>.from(json['headers'] as Map) : null, licenseUrl: json['licenseUrl'] as String?, licenseType: json['licenseType'] as String?, isFavorite: json['isFavorite'] as bool? ?? false, channelNumber: json['channelNumber'] as int?, catchupType: json['catchupType'] as String?, catchupSource: json['catchupSource'] as String?, catchupDays: json['catchupDays'] as int?);
-  }).toList();
-
-  final startTime = DateTime.fromMillisecondsSinceEpoch(startTimeMs);
-  final endTime = DateTime.fromMillisecondsSinceEpoch(endTimeMs);
-
-  // Reconstruct programs from JSON
-  final programs = programsJson.map((json) {
-    return Program(id: json['id'] as String, channelId: json['channelId'] as String, title: json['title'] as String, start: DateTime.fromMillisecondsSinceEpoch(json['start'] as int), end: DateTime.fromMillisecondsSinceEpoch(json['end'] as int), subtitle: json['subtitle'] as String?, description: json['description'] as String?, category: json['category'] as String?, iconUrl: json['iconUrl'] as String?, episodeNum: json['episodeNum'] as String?, rating: json['rating'] as String?, isNew: json['isNew'] as bool? ?? false, isLive: json['isLive'] as bool? ?? false, isPremiere: json['isPremiere'] as bool? ?? false);
-  }).toList();
-
-  final map = <String, List<Map<String, dynamic>>>{};
-
-  // Create a mapping from epgId (tvgId or id) to channelId for fast lookup
-  final epgIdToChannelId = <String, String>{};
-  for (final channel in channels) {
-    final epgId = channel.epgId; // This is tvgId ?? id
-    epgIdToChannelId[epgId] = channel.id;
-    // Also map tvgId directly if it exists
-    if (channel.tvgId != null && channel.tvgId != epgId) {
-      epgIdToChannelId[channel.tvgId!] = channel.id;
-    }
-    // And map id directly
-    epgIdToChannelId[channel.id] = channel.id;
+  void register(String key, String channelId) {
+    final ids = epgIdToChannelIds.putIfAbsent(key, () => <String>[]);
+    if (!ids.contains(channelId)) ids.add(channelId);
   }
 
-  // Pre-filter programs by time range for better performance
-  final filteredPrograms = programs.where((p) => p.end.isAfter(startTime) && p.start.isBefore(endTime)).toList();
+  for (final channel in args.channels) {
+    shiftByChannelId[channel.id] = channel.tvgShift ?? 0;
+    register(channel.epgId, channel.id); // epgId is tvgId ?? id
+    if (channel.tvgId != null && channel.tvgId != channel.epgId) {
+      register(channel.tvgId!, channel.id);
+    }
+    register(channel.id, channel.id);
+  }
 
-  // Group programs by channel ID - single pass, O(n) complexity
-  for (final program in filteredPrograms) {
-    // program.channelId contains the tvgId from XMLTV (or sometimes the channel id)
-    // Match it using epgId mapping
-    final matchedChannelId = epgIdToChannelId[program.channelId];
+  final map = <String, List<Program>>{};
+  for (final program in args.programs) {
+    // program.channelId contains the tvgId from XMLTV (or sometimes the
+    // channel id).
+    final channelIds = epgIdToChannelIds[program.channelId];
+    if (channelIds == null) continue;
 
-    if (matchedChannelId != null) {
-      final list = map.putIfAbsent(matchedChannelId, () => <Map<String, dynamic>>[]);
-      list.add({'id': program.id, 'channelId': program.channelId, 'title': program.title, 'start': program.start.millisecondsSinceEpoch, 'end': program.end.millisecondsSinceEpoch, 'subtitle': program.subtitle, 'description': program.description, 'category': program.category, 'iconUrl': program.iconUrl, 'episodeNum': program.episodeNum, 'rating': program.rating, 'isNew': program.isNew, 'isLive': program.isLive, 'isPremiere': program.isPremiere});
+    for (final channelId in channelIds) {
+      final shift = shiftByChannelId[channelId] ?? 0;
+      final shifted = shift == 0
+          ? program
+          : program.copyWith(
+              start: program.start.add(Duration(hours: shift)),
+              end: program.end.add(Duration(hours: shift)),
+            );
+      if (!shifted.end.isAfter(args.startTime) || !shifted.start.isBefore(args.endTime)) continue;
+      map.putIfAbsent(channelId, () => <Program>[]).add(shifted);
     }
   }
 
-  // Sort programs by start time for each channel (only once, after grouping)
-  for (final key in map.keys) {
-    map[key]!.sort((a, b) => (a['start'] as int).compareTo(b['start'] as int));
+  // Sort programs by start time for each channel
+  for (final list in map.values) {
+    list.sort((a, b) => a.start.compareTo(b.start));
   }
 
   return map;
-}
-
-/// Helper to convert Channel to JSON for serialization
-Map<String, dynamic> channelToJson(Channel channel) {
-  return {'id': channel.id, 'name': channel.name, 'url': channel.url, 'playlistId': channel.playlistId, 'tvgId': channel.tvgId, 'tvgName': channel.tvgName, 'logoUrl': channel.logoUrl, 'group': channel.group, 'language': channel.language, 'country': channel.country, 'tvgShift': channel.tvgShift, 'userAgent': channel.userAgent, 'referrer': channel.referrer, 'headers': channel.headers, 'licenseUrl': channel.licenseUrl, 'licenseType': channel.licenseType, 'isFavorite': channel.isFavorite, 'channelNumber': channel.channelNumber, 'catchupType': channel.catchupType, 'catchupSource': channel.catchupSource, 'catchupDays': channel.catchupDays};
 }

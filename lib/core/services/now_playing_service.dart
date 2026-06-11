@@ -43,7 +43,13 @@ class NowPlayingService {
     if (!_supported) return;
     final channel = state.channel;
     if (channel == null) {
-      await _channel.invokeMethod<void>('clear');
+      // Guard like 'update' below: _push is fire-and-forget from a listener,
+      // so a native-side throw here would surface as an unhandled async error.
+      try {
+        await _channel.invokeMethod<void>('clear');
+      } catch (e) {
+        AppLogger.warning('NowPlayingService clear failed: $e');
+      }
       return;
     }
     try {

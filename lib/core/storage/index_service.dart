@@ -1,5 +1,6 @@
 import 'package:hive_ce/hive.dart';
 
+import '../../features/epg/data/datasources/epg_local_data_source.dart';
 import '../../features/epg/data/models/epg_metadata_model.dart';
 import '../../features/epg/data/models/program_model.dart';
 import '../../features/playlist/data/models/channel_model.dart';
@@ -43,10 +44,13 @@ class IndexService {
     try {
       bool needsRebuild = false;
 
-      // Check channel indexes
+      // Check channel indexes. Avoid hydrating the entire channels box just
+      // to test emptiness: use it only when it is already open (free).
+      // Otherwise rely on the index existence checks; _buildChannelIndexes
+      // re-checks emptiness itself before doing any work.
       if (await Hive.boxExists(_channelsBoxName)) {
-        final box = await safeOpenBox<ChannelModel>(_channelsBoxName);
-        if (box.isNotEmpty) {
+        final knownEmpty = Hive.isBoxOpen(_channelsBoxName) && Hive.box<ChannelModel>(_channelsBoxName).isEmpty;
+        if (!knownEmpty) {
           // Check if group index exists
           if (!await HiveIndexHelper.indexExists(baseBoxName: _channelsBoxName, fieldName: 'group')) {
             AppLogger.debug('Channel group index missing, will rebuild');
@@ -65,7 +69,10 @@ class IndexService {
         }
       }
 
-      // Check EPG program indexes
+      // Check EPG program indexes. Only the (small) index boxes are opened
+      // here: opening a non-lazy program box just to validate would
+      // deserialize the entire multi-playlist EPG dataset into RAM on every
+      // app resume.
       if (await Hive.boxExists('epg_metadata')) {
         final metadataBox = await safeOpenBox<EpgMetadataModel>('epg_metadata');
         for (final key in metadataBox.keys) {
@@ -73,18 +80,15 @@ class IndexService {
           final programsBoxName = '$_programsBoxPrefix$playlistId';
 
           if (await Hive.boxExists(programsBoxName)) {
-            final box = await safeOpenBox<ProgramModel>(programsBoxName);
-            if (box.isNotEmpty) {
-              // Check if channelId index exists
-              if (!await HiveIndexHelper.indexExists(baseBoxName: programsBoxName, fieldName: 'channelId')) {
-                AppLogger.debug('Program channelId index missing for $playlistId, will rebuild');
-                needsRebuild = true;
-              }
-              // Check if startDate index exists
-              if (!await HiveIndexHelper.indexExists(baseBoxName: programsBoxName, fieldName: 'startDate')) {
-                AppLogger.debug('Program startDate index missing for $playlistId, will rebuild');
-                needsRebuild = true;
-              }
+            // Check if channelId index exists
+            if (!await HiveIndexHelper.indexExists(baseBoxName: programsBoxName, fieldName: 'channelId')) {
+              AppLogger.debug('Program channelId index missing for $playlistId, will rebuild');
+              needsRebuild = true;
+            }
+            // Check if startDate index exists
+            if (!await HiveIndexHelper.indexExists(baseBoxName: programsBoxName, fieldName: 'startDate')) {
+              AppLogger.debug('Program startDate index missing for $playlistId, will rebuild');
+              needsRebuild = true;
             }
           }
         }
@@ -111,16 +115,18 @@ class IndexService {
         return;
       }
 
-      final box = await safeOpenBox<ChannelModel>(_channelsBoxName);
-      if (box.isEmpty) {
-        return;
-      }
-
+      // Check the index boxes before opening the channels box so warm
+      // launches with valid indexes don't pay to hydrate it.
       final groupExists = await HiveIndexHelper.indexExists(baseBoxName: _channelsBoxName, fieldName: 'group');
       final favExists = await HiveIndexHelper.indexExists(baseBoxName: _channelsBoxName, fieldName: 'isFavorite');
       final playlistIdExists = await HiveIndexHelper.indexExists(baseBoxName: _channelsBoxName, fieldName: 'playlistId');
       if (groupExists && favExists && playlistIdExists) {
         AppLogger.debug('Channel indexes already exist, skipping rebuild');
+        return;
+      }
+
+      final box = await safeOpenBox<ChannelModel>(_channelsBoxName);
+      if (box.isEmpty) {
         return;
       }
 
@@ -158,7 +164,9 @@ class IndexService {
         return;
       }
 
-      final metadataBox = await safeOpenBox('epg_metadata');
+      // Must match the Box<EpgMetadataModel> type used everywhere else; an
+      // untyped open of an already-open typed box throws HiveError.
+      final metadataBox = await safeOpenBox<EpgMetadataModel>('epg_metadata');
 
       if (metadataBox.isEmpty) {
         return;
@@ -188,34 +196,23 @@ class IndexService {
   /// every warm launch.
   static Future<void> _buildProgramIndexesForPlaylist(String programsBoxName) async {
     try {
-      final box = await safeOpenBox<ProgramModel>(programsBoxName);
-      if (box.isEmpty) {
-        return;
-      }
-
+      // Check the (small) index boxes before touching the program box:
+      // opening a non-lazy program box deserializes every entry into RAM,
+      // which warm launches with valid indexes must not pay for.
       final channelIdExists = await HiveIndexHelper.indexExists(baseBoxName: programsBoxName, fieldName: 'channelId');
       final startDateExists = await HiveIndexHelper.indexExists(baseBoxName: programsBoxName, fieldName: 'startDate');
       if (channelIdExists && startDateExists) {
         return;
       }
 
-      if (!channelIdExists) {
-        // Lowercased to match HiveIndexHelper.getIndexedKeys normalization.
-        await HiveIndexHelper.buildIndex<ProgramModel>(baseBoxName: programsBoxName, fieldName: 'channelId', getFieldValue: (p) => p.channelId.toLowerCase(), getKey: (p) => p.id);
+      final box = await safeOpenBox<ProgramModel>(programsBoxName);
+      if (box.isEmpty) {
+        return;
       }
 
-      if (!startDateExists) {
-        // Use date as key (YYYYMMDD format) for efficient range queries.
-        await HiveIndexHelper.buildIndex<ProgramModel>(
-          baseBoxName: programsBoxName,
-          fieldName: 'startDate',
-          getFieldValue: (p) {
-            final date = p.start;
-            return '${date.year}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}';
-          },
-          getKey: (p) => p.id,
-        );
-      }
+      // Reuse the data source's compute-isolate rebuild instead of scanning
+      // hundreds of thousands of entries on the main isolate.
+      await EpgLocalDataSourceImpl.rebuildProgramIndexes(programsBoxName, box.values.toList(growable: false));
     } catch (e) {
       AppLogger.warning('Failed to build indexes for $programsBoxName: $e');
     }
@@ -246,7 +243,7 @@ class IndexService {
 
       // EPG program indexes
       if (await Hive.boxExists('epg_metadata')) {
-        final metadataBox = await safeOpenBox('epg_metadata');
+        final metadataBox = await safeOpenBox<EpgMetadataModel>('epg_metadata');
         for (final key in metadataBox.keys) {
           final playlistId = key.toString();
           final programsBoxName = '$_programsBoxPrefix$playlistId';

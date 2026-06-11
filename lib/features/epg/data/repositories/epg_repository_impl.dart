@@ -1,6 +1,9 @@
+import 'package:dio/dio.dart';
 import 'package:fpdart/fpdart.dart';
 
 import '../../../../core/error/failures.dart';
+import '../../../../core/storage/hive_storage.dart';
+import '../../../playlist/data/models/playlist_model.dart';
 import '../../domain/entities/epg_channel.dart';
 import '../../domain/entities/epg_data.dart';
 import '../../domain/entities/program.dart';
@@ -19,10 +22,22 @@ class EpgRepositoryImpl implements EpgRepository {
         _remoteDataSource = remoteDataSource;
 
   @override
-  Future<Either<Failure, EpgData>> fetchAndStoreEpg(String playlistId, String url) async {
+  Future<Either<Failure, EpgData>> fetchAndStoreEpg(String playlistId, String url, {CancelToken? cancelToken}) async {
     try {
       // Fetch EPG data from remote
-      final epgData = await _remoteDataSource.fetchEpg(url);
+      final epgData = await _remoteDataSource.fetchEpg(url, cancelToken: cancelToken);
+
+      // The XMLTV download can take minutes. If the playlist was deleted
+      // while it was in flight, saving now would resurrect orphaned EPG
+      // boxes that deletePlaylist already removed, so re-check existence
+      // immediately before the write. This is a CancelledFailure, not a
+      // CacheFailure: the refresh may have started after the delete (so its
+      // token was never cancelled) and dropping it must not surface as a
+      // user-facing error toast.
+      final playlistsBox = await safeOpenBox<PlaylistModel>('playlists');
+      if (!playlistsBox.containsKey(playlistId)) {
+        return Left(CancelledFailure('Playlist $playlistId was deleted during EPG refresh; discarding fetched data'));
+      }
 
       // Store locally
       await _localDataSource.saveEpgData(

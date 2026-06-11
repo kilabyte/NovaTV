@@ -3,11 +3,8 @@ import '../../domain/entities/channel.dart';
 
 /// Parser for M3U and M3U8 playlist files with extended attributes
 class M3UParser {
-  // EXTINF pattern: #EXTINF:duration tvg-attributes,channel-name
-  static final _extinfPattern = RegExp(
-    r'^#EXTINF:\s*(-?\d+)\s*(.*?),\s*(.*)$',
-    multiLine: true,
-  );
+  // EXTINF duration prefix: #EXTINF:duration, followed by attributes and name
+  static final _extinfDurationPattern = RegExp(r'^#EXTINF:\s*(-?\d+(?:\.\d+)?)\s*');
 
   // Attribute patterns for tvg-* attributes
   static final _tvgIdPattern = RegExp(r'tvg-id="([^"]*)"', caseSensitive: false);
@@ -63,6 +60,7 @@ class M3UParser {
     }
 
     final channels = <Channel>[];
+    final usedIds = <String>{};
     String? currentExtinf;
     String? currentUserAgent;
     String? currentReferrer;
@@ -96,20 +94,19 @@ class M3UParser {
         continue;
       }
 
-      // Parse KODIPROP for license URL
-      if (line.toLowerCase().contains('license_key=')) {
-        final match = _licenseUrlPattern.firstMatch(line);
-        if (match != null) {
-          currentLicenseUrl = match.group(1)?.trim();
+      // Parse KODIPROP for license URL / license type. Guard on the
+      // #KODIPROP: prefix so stream URLs that merely contain license_key= or
+      // license_type= as a query parameter are not swallowed (which silently
+      // dropped the channel).
+      if (line.toLowerCase().startsWith('#kodiprop:')) {
+        final keyMatch = _licenseUrlPattern.firstMatch(line);
+        if (keyMatch != null) {
+          currentLicenseUrl = keyMatch.group(1)?.trim();
+          continue;
         }
-        continue;
-      }
-
-      // Parse KODIPROP for license type
-      if (line.toLowerCase().contains('license_type=')) {
-        final match = _licenseTypePattern.firstMatch(line);
-        if (match != null) {
-          currentLicenseType = match.group(1)?.trim();
+        final typeMatch = _licenseTypePattern.firstMatch(line);
+        if (typeMatch != null) {
+          currentLicenseType = typeMatch.group(1)?.trim();
         }
         continue;
       }
@@ -150,6 +147,7 @@ class M3UParser {
           extgrp: currentExtgrp,
           headers: currentHeaders.isNotEmpty ? Map<String, String>.from(currentHeaders) : null,
           channelIndex: channels.length,
+          usedIds: usedIds,
         );
 
         if (channel != null) {
@@ -182,14 +180,37 @@ class M3UParser {
     String? extgrp,
     Map<String, String>? headers,
     required int channelIndex,
+    required Set<String> usedIds,
   }) {
-    final match = _extinfPattern.firstMatch(extinfLine);
-    if (match == null) {
+    final durationMatch = _extinfDurationPattern.firstMatch(extinfLine);
+    if (durationMatch == null) {
       return null;
     }
 
-    final attributes = match.group(2) ?? '';
-    final name = match.group(3)?.trim() ?? 'Unknown Channel';
+    // Split attributes from the display name at the first comma OUTSIDE
+    // double quotes. Quoted attribute values commonly contain commas
+    // (group-title="USA, News"), so a naive first-comma split corrupts both
+    // the attributes and the name. The display name is everything after the
+    // comma that follows the last attribute.
+    final rest = extinfLine.substring(durationMatch.end);
+    var splitIndex = -1;
+    var inQuotes = false;
+    for (var i = 0; i < rest.length; i++) {
+      final char = rest[i];
+      if (char == '"') {
+        inQuotes = !inQuotes;
+      } else if (char == ',' && !inQuotes) {
+        splitIndex = i;
+        break;
+      }
+    }
+    if (splitIndex < 0) {
+      return null;
+    }
+
+    final attributes = rest.substring(0, splitIndex);
+    final rawName = rest.substring(splitIndex + 1).trim();
+    final name = rawName.isNotEmpty ? rawName : 'Unknown Channel';
 
     // Extract tvg-id
     final tvgIdMatch = _tvgIdPattern.firstMatch(attributes);
@@ -233,10 +254,18 @@ class M3UParser {
     final catchupDaysMatch = _catchupDaysPattern.firstMatch(attributes);
     final catchupDays = catchupDaysMatch != null ? int.tryParse(catchupDaysMatch.group(1) ?? '') : null;
 
-    // Generate unique ID using playlist ID and channel index
-    // We use channel index because tvg-id can be duplicated across different groups
-    // The tvgId field is preserved separately for EPG matching
-    final id = '${playlistId}_$channelIndex';
+    // Generate a stable, content-derived ID. Positional indexes shift when
+    // the provider adds/removes/reorders channels upstream, which corrupted
+    // the persisted recently-watched list across refreshes. tvgId/name/group
+    // are included as tiebreakers because tvg-id can repeat across groups.
+    final baseId = stableChannelId(playlistId: playlistId, url: url, tvgId: tvgId, name: name, group: group);
+    var id = baseId;
+    var bump = 1;
+    // Identical duplicate entries (same URL and metadata) get a positional
+    // suffix in file order so IDs stay unique within the playlist.
+    while (!usedIds.add(id)) {
+      id = '${baseId}_${bump++}';
+    }
 
     return Channel(
       id: id,
@@ -262,9 +291,38 @@ class M3UParser {
     );
   }
 
+  /// Stable, content-derived base channel ID (without the duplicate suffix).
+  /// Shared by the parser and the one-time legacy-ID re-key migration
+  /// (ChannelIdMigration) so the two derivations cannot drift. Empty-string
+  /// and null tvgId/group hash identically, matching how stored records
+  /// null out empty attributes.
+  static String stableChannelId({required String playlistId, required String url, String? tvgId, required String name, String? group}) {
+    return '${playlistId}_${_stableHash('$url|${tvgId ?? ''}|$name|${group ?? ''}')}';
+  }
+
+  /// FNV-1a hash, hex-encoded. Used instead of String.hashCode because the
+  /// resulting channel IDs are persisted (recently watched) and must stay
+  /// stable across app launches and Dart versions.
+  static String _stableHash(String input) {
+    var hash = 0xcbf29ce484222325;
+    for (final unit in input.codeUnits) {
+      hash ^= unit;
+      hash *= 0x100000001b3;
+    }
+    return (hash & 0x7fffffffffffffff).toRadixString(16);
+  }
+
+  /// First line of [content] without materializing a full line split of a
+  /// potentially tens-of-MB playlist string.
+  static String _firstLine(String content) {
+    final newlineIndex = content.indexOf('\n');
+    final line = newlineIndex < 0 ? content : content.substring(0, newlineIndex);
+    return line.endsWith('\r') ? line.substring(0, line.length - 1) : line;
+  }
+
   /// Extract x-tvg-url attribute from M3U header (EPG URL)
   String? extractEpgUrl(String content) {
-    final headerLine = content.split('\n').first;
+    final headerLine = _firstLine(content);
     final pattern = RegExp(r'x-tvg-url="([^"]*)"', caseSensitive: false);
     final match = pattern.firstMatch(headerLine);
     return match?.group(1);
@@ -272,7 +330,7 @@ class M3UParser {
 
   /// Extract url-tvg attribute from M3U header (alternative EPG URL format)
   String? extractUrlTvg(String content) {
-    final headerLine = content.split('\n').first;
+    final headerLine = _firstLine(content);
     final pattern = RegExp(r'url-tvg="([^"]*)"', caseSensitive: false);
     final match = pattern.firstMatch(headerLine);
     return match?.group(1);
@@ -292,7 +350,6 @@ class M3UParser {
   /// Validate if content is valid M3U
   bool isValidM3U(String content) {
     if (content.isEmpty) return false;
-    final firstLine = content.split('\n').first.trim();
-    return firstLine.startsWith('#EXTM3U');
+    return _firstLine(content).trim().startsWith('#EXTM3U');
   }
 }

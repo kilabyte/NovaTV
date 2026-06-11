@@ -110,6 +110,25 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   final List<DateTime> _bufferingEvents = [];
   Timer? _healthTimer;
 
+  /// Generation counter guarding [playChannel] against supersession. Each
+  /// playChannel (and external stop) bumps it; stale continuations compare
+  /// their captured value after every await and bail out, so rapid zapping
+  /// can't write channel A's state over channel B's player or open() a
+  /// disposed Player.
+  int _playGeneration = 0;
+
+  /// Channel id of the most recent [playChannel] request. Unlike
+  /// state.channel (only set after the repository lookup succeeds), this is
+  /// recorded up front so [retry] still works when the lookup itself failed.
+  String? _lastRequestedChannelId;
+
+  /// Auto-reconnect bookkeeping: reentrancy flag and attempt counter so a
+  /// stream stuck in an error loop doesn't hammer the server with
+  /// overlapping open() calls.
+  bool _reconnectInFlight = false;
+  int _reconnectAttempts = 0;
+  static const int _maxReconnectAttempts = 5;
+
   PlayerNotifier(this._ref) : super(const PlayerState()) {
     // Seed volume/mute from persisted settings so the first play respects
     // what the user had before.
@@ -119,12 +138,19 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
   /// Play a channel
   Future<void> playChannel(String channelId) async {
+    // Claim a new generation; any in-flight playChannel becomes stale.
+    final generation = ++_playGeneration;
+    _lastRequestedChannelId = channelId;
+    _reconnectAttempts = 0;
+
     // Remember the currently-playing channel so the user can jump back with
     // the last-channel toggle. We capture it BEFORE stop() clears state.
     final previousChannelId = state.channel?.id;
 
-    // Stop existing player if any
-    await stop();
+    // Stop existing player if any (teardown only; public stop() would bump
+    // the generation and invalidate this very call).
+    await _teardownPlayer();
+    if (!mounted || generation != _playGeneration) return;
 
     // Track as recently watched
     _ref.read(recentlyWatchedNotifierProvider.notifier).addChannel(channelId);
@@ -163,7 +189,12 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     // fire state.copyWith() on the next channel's state.
     _subscriptions.add(player.stream.playing.listen((playing) {
       if (mounted) {
-        state = state.copyWith(isPlaying: playing);
+        // Clear any stale error once playback is confirmed running again:
+        // FFmpeg auto-reconnect (see _applyMpvIptvTuning) can recover from
+        // transient errors by itself, and the error panel would otherwise
+        // hide live video forever.
+        state = state.copyWith(isPlaying: playing, clearError: playing);
+        if (playing) _reconnectAttempts = 0;
       }
     }));
 
@@ -223,7 +254,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     // Load channel
     final repository = _ref.read(playlistRepositoryProvider);
     final result = await repository.getChannel(channelId);
-    if (!mounted) return;
+    if (!mounted || generation != _playGeneration) return;
 
     result.fold(
       (failure) {
@@ -231,6 +262,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       },
       (channel) async {
         try {
+          if (generation != _playGeneration) return;
           state = state.copyWith(channel: channel);
 
           final httpHeaders = <String, String>{};
@@ -246,7 +278,9 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
           await _openWithMimeFallback(player, channel.url, httpHeaders);
         } catch (e) {
-          if (mounted) {
+          // A superseded call's open() failing on its disposed player must
+          // not write a bogus error onto the new channel's state.
+          if (mounted && generation == _playGeneration) {
             state = state.copyWith(errorMessage: 'Failed to start playback: ${e.toString()}');
           }
         }
@@ -275,12 +309,36 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
   /// Stop and dispose player
   Future<void> stop() async {
+    // Invalidate any in-flight playChannel so its continuation cannot
+    // resurrect state after we reset it.
+    _playGeneration++;
+    await _teardownPlayer();
+  }
+
+  /// In-flight teardown, if any. Rapid zapping (playChannel + playChannel or
+  /// playChannel + stop) enters teardown concurrently; without coalescing the
+  /// second caller would iterate _subscriptions while the first clear()s it
+  /// (ConcurrentModificationError) and double-dispose the same Player, which
+  /// media_kit rejects with an AssertionError.
+  Future<void>? _teardownFuture;
+
+  /// Shared teardown used by stop() and playChannel(). Does NOT bump the
+  /// generation counter: playChannel calls this for its own old player and
+  /// must stay the current generation. Concurrent callers await the same
+  /// in-flight teardown.
+  Future<void> _teardownPlayer() {
+    return _teardownFuture ??= _doTeardown().whenComplete(() => _teardownFuture = null);
+  }
+
+  Future<void> _doTeardown() async {
     // Cancel stream listeners first so late events cannot clobber the
     // subsequent state = const PlayerState() or a new channel's state.
-    for (final sub in _subscriptions) {
+    // Snapshot-and-clear so a reentrant register cannot race the iteration.
+    final subs = List<StreamSubscription<dynamic>>.of(_subscriptions);
+    _subscriptions.clear();
+    for (final sub in subs) {
       await sub.cancel();
     }
-    _subscriptions.clear();
     // Stop the health timer too — no point polling when there's no player.
     _healthTimer?.cancel();
     _healthTimer = null;
@@ -291,9 +349,11 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     }
   }
 
-  /// Retry playback
+  /// Retry playback. Falls back to the last requested channel id so the
+  /// button still works when the initial channel lookup failed (state.channel
+  /// was never set in that case).
   Future<void> retry() async {
-    final channelId = state.channel?.id;
+    final channelId = state.channel?.id ?? _lastRequestedChannelId;
     if (channelId != null) {
       state = state.copyWith(clearError: true);
       await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -359,13 +419,19 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   Future<void> _openWithMimeFallback(Player player, String url, Map<String, String> headers) async {
     final cached = _urlMimeCache[url];
 
+    // Append fallback extensions to the URL *path*, not the raw string:
+    // naive '$url.m3u8' on a tokenized URL (...?token=abc) would corrupt the
+    // query value. Same reason the extension check inspects the path only.
+    final uri = Uri.tryParse(url);
+    final path = uri?.path ?? url;
+
     final candidates = <String>[
       if (cached != null) cached,
       // Always try the raw URL and common extensions in case the cached
       // variant has gone bad.
       if (cached != url) url,
-      if (!url.contains('.m3u8')) '$url.m3u8',
-      if (!url.contains('.mpd')) '$url.mpd',
+      if (uri != null && !path.endsWith('.m3u8')) uri.replace(path: '$path.m3u8').toString(),
+      if (uri != null && !path.endsWith('.mpd')) uri.replace(path: '$path.mpd').toString(),
     ];
 
     Object? lastError;
@@ -426,20 +492,44 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
   /// Silent reconnect: re-open the current channel's URL without tearing the
   /// player down. Used when the stream drifts past its live window or the
-  /// server briefly drops the connection.
+  /// server briefly drops the connection. Guarded against reentrancy (error
+  /// events can arrive faster than open() completes), capped, and backed off
+  /// exponentially so a dead server isn't hammered.
   Future<void> _tryReconnect() async {
+    if (_reconnectInFlight) return;
     final channel = state.channel;
     final player = state.player;
     if (channel == null || player == null) return;
 
-    final httpHeaders = <String, String>{};
-    if (channel.userAgent != null) httpHeaders['User-Agent'] = channel.userAgent!;
-    if (channel.referrer != null) httpHeaders['Referer'] = channel.referrer!;
-    if (channel.headers != null) httpHeaders.addAll(channel.headers!);
+    if (_reconnectAttempts >= _maxReconnectAttempts) {
+      // Out of attempts: surface the failure so the UI offers Retry instead
+      // of leaving a silently frozen stream.
+      state = state.copyWith(errorMessage: 'Stream disconnected: automatic reconnect failed');
+      return;
+    }
+
+    _reconnectInFlight = true;
+    _reconnectAttempts++;
     try {
-      await player.open(Media(channel.url, httpHeaders: httpHeaders.isNotEmpty ? httpHeaders : null));
+      // Exponential backoff: 1s, 2s, 4s, 8s, 16s.
+      await Future<void>.delayed(Duration(seconds: 1 << (_reconnectAttempts - 1)));
+      // The user may have zapped or stopped during the backoff.
+      if (!mounted || !identical(state.player, player)) return;
+
+      final httpHeaders = <String, String>{};
+      if (channel.userAgent != null) httpHeaders['User-Agent'] = channel.userAgent!;
+      if (channel.referrer != null) httpHeaders['Referer'] = channel.referrer!;
+      if (channel.headers != null) httpHeaders.addAll(channel.headers!);
+      // Go through the MIME fallback chain so channels that only play via
+      // the cached .m3u8/.mpd variant reconnect with the right URL.
+      await _openWithMimeFallback(player, channel.url, httpHeaders);
     } catch (e) {
-      AppLogger.warning('Silent reconnect failed: $e');
+      AppLogger.warning('Silent reconnect failed (attempt $_reconnectAttempts/$_maxReconnectAttempts): $e');
+      if (mounted && identical(state.player, player) && _reconnectAttempts >= _maxReconnectAttempts) {
+        state = state.copyWith(errorMessage: 'Stream disconnected: automatic reconnect failed');
+      }
+    } finally {
+      _reconnectInFlight = false;
     }
   }
 

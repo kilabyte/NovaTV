@@ -4,9 +4,21 @@ import 'package:hive_ce/hive.dart';
 /// Since Hive doesn't support traditional indexes, we use separate boxes to
 /// store key mappings for frequently queried fields
 class HiveIndexHelper {
+  /// Reserved key marking an index box as fully written. It is written last
+  /// during a rebuild, so a crash mid-build leaves a box without it; readers
+  /// and existence checks treat such a box as "no index" and fall back to
+  /// full scans until the next rebuild instead of trusting partial data.
+  static const String indexMetaKey = '__index_meta__';
+
   /// Create an index box name for a specific field
   static String _indexBoxName(String baseBox, String field) {
     return '${baseBox}_index_$field';
+  }
+
+  /// Mark an index box as completely written. Must be the last write of a
+  /// rebuild. Exposed for callers that write index boxes directly.
+  static Future<void> markIndexComplete(Box<List<dynamic>> indexBox) {
+    return indexBox.put(indexMetaKey, const <dynamic>['complete']);
   }
 
   /// Helper to open a Hive box with retry logic for lock errors
@@ -18,17 +30,14 @@ class HiveIndexHelper {
         }
         return await Hive.openBox<T>(boxName);
       } catch (e) {
+        // An open box means a type-parameter mismatch, not a lock/IO error;
+        // closing it would break the other holder, so rethrow immediately.
+        if (Hive.isBoxOpen(boxName)) {
+          rethrow;
+        }
         if (attempt < maxRetries - 1) {
           // Wait before retry
           await Future.delayed(Duration(milliseconds: 100 * (attempt + 1)));
-          // Try to close if open
-          if (Hive.isBoxOpen(boxName)) {
-            try {
-              await Hive.box(boxName).close();
-            } catch (_) {
-              // Ignore close errors
-            }
-          }
         } else {
           rethrow;
         }
@@ -62,8 +71,10 @@ class HiveIndexHelper {
       }
     }
 
-    // Store index
+    // Store index, then mark it complete as the final write so a crash
+    // mid-putAll is detectable (the sentinel will be missing).
     await indexBox.putAll(indexMap);
+    await markIndexComplete(indexBox);
   }
 
   /// Get keys from an index for a specific field value
@@ -74,6 +85,11 @@ class HiveIndexHelper {
     }
 
     final indexBox = await _openBoxWithRetry<List<dynamic>>(indexBoxName);
+    // A box without the completion sentinel is a partial write from a crashed
+    // rebuild; treat it as no index so callers fall back to a full scan.
+    if (!indexBox.containsKey(indexMetaKey)) {
+      return [];
+    }
     final normalizedValue = fieldValue.toLowerCase();
     return indexBox.get(normalizedValue) ?? [];
   }
@@ -129,15 +145,24 @@ class HiveIndexHelper {
   /// Delete an index
   static Future<void> deleteIndex({required String baseBoxName, required String fieldName}) async {
     final indexBoxName = _indexBoxName(baseBoxName, fieldName);
-    if (await Hive.boxExists(indexBoxName)) {
-      final indexBox = await Hive.openBox(indexBoxName);
-      await indexBox.deleteFromDisk();
+    if (Hive.isBoxOpen(indexBoxName)) {
+      // An untyped openBox here would throw against the Box<List<dynamic>>
+      // opens used everywhere else; use the already-open instance instead.
+      await Hive.box<List<dynamic>>(indexBoxName).deleteFromDisk();
+    } else if (await Hive.boxExists(indexBoxName)) {
+      await Hive.deleteBoxFromDisk(indexBoxName);
     }
   }
 
-  /// Check if an index exists
+  /// Check if an index exists and was completely written
   static Future<bool> indexExists({required String baseBoxName, required String fieldName}) async {
     final indexBoxName = _indexBoxName(baseBoxName, fieldName);
-    return await Hive.boxExists(indexBoxName);
+    if (!await Hive.boxExists(indexBoxName)) {
+      return false;
+    }
+    // Existence of the box file is not enough: a crash between clear() and
+    // the completion sentinel leaves a partial index that must be rebuilt.
+    final indexBox = await _openBoxWithRetry<List<dynamic>>(indexBoxName);
+    return indexBox.containsKey(indexMetaKey);
   }
 }

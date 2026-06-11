@@ -16,17 +16,16 @@ Future<Box<T>> safeOpenBox<T>(String boxName, {int maxRetries = 3}) async {
       }
       return await Hive.openBox<T>(boxName);
     } catch (e) {
+      // If the box is open, the failure is a type-parameter mismatch with
+      // another holder, not a lock/IO error. Closing it here would yank the
+      // box out from under active readers and lose in-flight writes, and a
+      // retry would deterministically fail again, so rethrow immediately.
+      if (Hive.isBoxOpen(boxName)) {
+        rethrow;
+      }
       if (attempt < maxRetries - 1) {
         // Wait with exponential backoff before retry
         await Future.delayed(Duration(milliseconds: 100 * (attempt + 1)));
-        // Try to close if somehow half-open
-        if (Hive.isBoxOpen(boxName)) {
-          try {
-            await Hive.box(boxName).close();
-          } catch (_) {
-            // Ignore close errors
-          }
-        }
       } else {
         // Last attempt failed, rethrow
         rethrow;

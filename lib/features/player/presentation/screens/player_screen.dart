@@ -35,6 +35,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   bool _showControls = true;
 
+  /// True while a user-initiated retry is in flight (drives the spinner on
+  /// the error panel's Retry button).
+  bool _retrying = false;
+
   /// Tracks the pending controls-hide callback so we can cancel it on the
   /// next tap/hover instead of stacking overlapping callbacks.
   Timer? _controlsHideTimer;
@@ -154,6 +158,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
+  /// Retry with visible feedback. The actual retry can fail again in under a
+  /// second (e.g. the server keeps refusing), which used to repaint the same
+  /// error panel so fast the button looked dead - keep the spinner up briefly
+  /// so the attempt is perceivable.
+  Future<void> _retryPlayback() async {
+    setState(() => _retrying = true);
+    try {
+      await ref.read(playerProvider.notifier).retry();
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+    } finally {
+      if (mounted) setState(() => _retrying = false);
+    }
+  }
+
   void _closePlayer() {
     // Stop playback completely and close
     ref.read(playerProvider.notifier).stop();
@@ -264,9 +282,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                   controls: NoVideoControls,
                 ),
               )
-            else if (errorMessage != null)
-              _buildErrorState(errorMessage)
-            else
+            else if (errorMessage == null)
               _buildLoadingState(),
 
             // Transparent tap layer to toggle controls (tap anywhere)
@@ -277,6 +293,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                 child: Container(color: Colors.transparent),
               ),
             ),
+
+            // Error panel sits ABOVE the tap-toggle layer: its buttons and
+            // the layer's tap recognizer compete in the gesture arena, and
+            // the topmost contender wins - below the layer the buttons lose
+            // every click to the controls toggle and feel dead.
+            if (errorMessage != null) _buildErrorState(errorMessage),
 
             // Buffering indicator
             if (playerState.isBuffering && errorMessage == null)
@@ -419,10 +441,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton(
-                  onPressed: () async {
-                    // Show loading state while retrying
-                    await ref.read(playerProvider.notifier).retry();
-                  },
+                  onPressed: _retrying ? null : _retryPlayback,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.black,
@@ -431,10 +450,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child: const Text(
-                    'Retry',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
+                  child: _retrying
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black54),
+                        )
+                      : const Text(
+                          'Retry',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
                 ),
               ],
             ),
@@ -445,33 +470,46 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   Widget _buildControlsOverlay(PlayerState playerState, dynamic channel) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.black.withValues(alpha: 0.7),
-            Colors.transparent,
-            Colors.transparent,
-            Colors.black.withValues(alpha: 0.8),
-          ],
-          stops: const [0.0, 0.2, 0.75, 1.0],
+    // The gradient must not participate in hit testing: a decorated
+    // full-screen box hit-tests opaquely over its entire bounds, which
+    // swallowed every click under the overlay (error-panel buttons, the
+    // tap-to-hide layer) whenever controls were visible. Only the top and
+    // bottom bars are interactive; the middle passes through.
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.7),
+                    Colors.transparent,
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.8),
+                  ],
+                  stops: const [0.0, 0.2, 0.75, 1.0],
+                ),
+              ),
+            ),
+          ),
         ),
-      ),
-      child: SafeArea(
-        child: Column(
-          children: [
-            // Top bar
-            _buildTopBar(playerState, channel),
+        SafeArea(
+          child: Column(
+            children: [
+              // Top bar
+              _buildTopBar(playerState, channel),
 
-            const Spacer(),
+              const Spacer(),
 
-            // Bottom bar with play/pause
-            _buildBottomBar(channel, playerState),
-          ],
+              // Bottom bar with play/pause
+              _buildBottomBar(channel, playerState),
+            ],
+          ),
         ),
-      ),
+      ],
     );
   }
 

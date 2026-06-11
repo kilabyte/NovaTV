@@ -1543,8 +1543,10 @@ class _ProgramCellState extends State<_ProgramCell> {
     // Build the text content widget - use dynamic left padding instead of Transform
     // to ensure text has full remaining width available
     Widget buildTextContent(double offset) {
+      // Vertical padding of 10 left the two text lines only 36px, ~3px short
+      // of their natural height — every cell drew a debug overflow stripe.
       return Padding(
-        padding: EdgeInsets.only(left: 10 + offset, right: 10, top: 10, bottom: 10),
+        padding: EdgeInsets.only(left: 10 + offset, right: 10, top: 7, bottom: 7),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1563,7 +1565,7 @@ class _ProgramCellState extends State<_ProgramCell> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 3),
             Text(
               '$startTime - $endTime',
               style: TextStyle(color: hasEnded ? AppColors.textMuted.withValues(alpha: 0.7) : AppColors.textMuted, fontSize: 11),

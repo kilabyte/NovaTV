@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce/hive.dart';
 
 import '../../../../core/storage/hive_storage.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../../data/models/app_settings_model.dart';
 
 /// Provider for the settings box
@@ -54,7 +55,14 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsModel> {
   }
 
   Future<void> _saveSettings() async {
-    await _box?.put(_settingsKey, state);
+    // Setters call this fire-and-forget; without the catch a failed put
+    // (closed box, disk full) becomes an unhandled async exception and the
+    // in-memory state silently diverges from disk.
+    try {
+      await _box?.put(_settingsKey, state);
+    } catch (e) {
+      AppLogger.warning('Failed to persist settings: $e');
+    }
   }
 
   void setThemeMode(String mode) {

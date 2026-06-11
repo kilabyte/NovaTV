@@ -5,6 +5,7 @@ import 'package:logger/logger.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'core/services/window_service.dart';
+import 'core/storage/channel_id_migration.dart';
 import 'core/storage/hive_storage.dart';
 import 'core/storage/index_service.dart';
 import 'core/utils/app_logger.dart';
@@ -34,6 +35,12 @@ Future<void> bootstrap() async {
   AppLogger.debug('Initializing Hive storage...');
   final storage = HiveStorage();
   await storage.init();
+
+  // One-time re-key of legacy positional channel IDs. Awaited here so it
+  // completes before runApp: the startup auto-refresh rewrites the channels
+  // box and would otherwise prune the old-ID records (and their favorites).
+  AppLogger.debug('Running storage migrations...');
+  await ChannelIdMigration.run();
 
   // Build indexes for existing data (runs in background to not block startup)
   AppLogger.debug('Building Hive indexes...');

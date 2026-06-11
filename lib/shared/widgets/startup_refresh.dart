@@ -56,24 +56,38 @@ Future<void> performStartupRefresh(WidgetRef ref) async {
     }
 
     Future<bool> refreshEpg(Playlist p) async {
-      try {
-        AppLogger.info('Refreshing EPG for playlist: ${p.name}');
-        await ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(p.id, p.epgUrl!);
-        return true;
-      } catch (e) {
-        AppLogger.warning('Failed to refresh EPG for ${p.name}: $e');
-        return false;
-      }
+      AppLogger.info('Refreshing EPG for playlist: ${p.name}');
+      // refreshEpg never throws; failures come back as false (and land in
+      // the EPG notifier's error state).
+      final ok = await ref.read(epgRefreshNotifierProvider.notifier).refreshEpg(p.id, p.epgUrl!);
+      if (!ok) AppLogger.warning('Failed to refresh EPG for ${p.name}');
+      return ok;
     }
 
-    if (stalePlaylists.isNotEmpty) {
-      final results = await Future.wait(stalePlaylists.map(refreshOne), eagerError: false);
+    // Chain each playlist's EPG refresh directly onto that playlist's own
+    // refresh rather than running a separate pass after ALL playlists finish.
+    // refreshPlaylist already fires a background EPG refresh on success, so
+    // calling refreshEpg immediately afterwards dedupes onto that in-flight
+    // download (the notifier's _inFlight map) instead of fetching the feed a
+    // second time; the old two-phase structure left a window where a small
+    // EPG could complete before the second pass started and be re-downloaded.
+    final epgFutures = <Future<bool>>[];
+    final playlistFutures = stalePlaylists.map((p) {
+      final playlistFuture = refreshOne(p);
+      if (staleEpgs.contains(p)) {
+        epgFutures.add(playlistFuture.then((_) => refreshEpg(p)));
+      }
+      return playlistFuture;
+    }).toList();
+
+    if (playlistFutures.isNotEmpty) {
+      final results = await Future.wait(playlistFutures, eagerError: false);
       refreshNotifier.completePlaylistRefresh(success: results.every((ok) => ok));
       ref.read(goToNowTriggerProvider.notifier).state++;
     }
 
-    if (staleEpgs.isNotEmpty) {
-      final results = await Future.wait(staleEpgs.map(refreshEpg), eagerError: false);
+    if (epgFutures.isNotEmpty) {
+      final results = await Future.wait(epgFutures, eagerError: false);
       refreshNotifier.completeEpgRefresh(success: results.every((ok) => ok));
       ref.read(goToNowTriggerProvider.notifier).state++;
     }

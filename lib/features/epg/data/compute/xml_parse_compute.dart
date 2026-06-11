@@ -1,21 +1,32 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:xml/xml.dart';
 
 import '../../domain/entities/epg_channel.dart';
 import '../../domain/entities/program.dart';
 
-/// Parameters for parseXmltvContent compute function
+/// Parameters for parseXmltvContent compute function.
+/// Exactly one of [filePath], [bytes] or [content] must be provided. Prefer
+/// [filePath]: the isolate then reads, gunzips and decodes the feed itself,
+/// so the main isolate never holds the raw bytes or the decompressed string
+/// (real XMLTV feeds decompress to hundreds of MB). [bytes] is kept for
+/// callers and tests that already hold the feed in memory.
 class ParseXmltvParams {
-  final String content;
+  final Uint8List? bytes;
+  final String? content;
+  final String? filePath;
   final String sourceUrl;
 
-  ParseXmltvParams({required this.content, required this.sourceUrl});
+  ParseXmltvParams({this.bytes, this.content, this.filePath, required this.sourceUrl}) : assert(bytes != null || content != null || filePath != null, 'One of filePath, bytes or content must be provided');
 }
 
 /// Top-level function for parsing XMLTV content using compute isolate
 /// This processes heavy XML parsing off the main thread to prevent UI freezing
 @pragma('vm:entry-point')
 Map<String, dynamic> parseXmltvContent(ParseXmltvParams params) {
-  final content = params.content;
+  final content = params.content ?? decodeXmltvBytes(params.bytes ?? File(params.filePath!).readAsBytesSync());
   final sourceUrl = params.sourceUrl;
   final document = XmlDocument.parse(content);
   final tv = document.rootElement;
@@ -50,6 +61,42 @@ Map<String, dynamic> parseXmltvContent(ParseXmltvParams params) {
   }
 
   return {'sourceUrl': sourceUrl, 'generatedAt': generatedAt?.millisecondsSinceEpoch, 'fetchedAt': DateTime.now().millisecondsSinceEpoch, 'channels': channels, 'programs': programs};
+}
+
+/// Decompress (if gzipped) and decode raw XMLTV bytes to a string, honoring
+/// the encoding declared in the XML prolog. Latin-1/Windows-1252 feeds are
+/// still common from European providers; decoding them as strict UTF-8 used
+/// to fail the entire refresh on the first accented character.
+String decodeXmltvBytes(Uint8List raw) {
+  List<int> bytes = raw;
+
+  // Check for gzip magic bytes
+  if (bytes.length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b) {
+    bytes = gzip.decode(bytes);
+  }
+
+  // The XML prolog is ASCII-compatible, so sniffing the declaration from the
+  // first bytes is safe regardless of the actual encoding.
+  final prologLength = bytes.length < 200 ? bytes.length : 200;
+  final prolog = String.fromCharCodes(bytes.sublist(0, prologLength));
+  final encodingMatch = RegExp('encoding=["\']([^"\']+)["\']', caseSensitive: false).firstMatch(prolog);
+  final encoding = encodingMatch?.group(1)?.toLowerCase();
+
+  switch (encoding) {
+    case 'iso-8859-1':
+    case 'iso8859-1':
+    case 'latin-1':
+    case 'latin1':
+    // latin1 is a close superset for the 0x80-0x9F range; good enough for
+    // programme text and never throws.
+    case 'windows-1252':
+    case 'cp1252':
+      return latin1.decode(bytes);
+    default:
+      // UTF-8 declared, undeclared, or unknown: tolerate stray invalid bytes
+      // instead of discarding the whole guide over a single bad character.
+      return utf8.decode(bytes, allowMalformed: true);
+  }
 }
 
 /// Parse a channel element
@@ -190,6 +237,15 @@ DateTime? _parseXmltvDate(String dateStr) {
     if (spaceIndex > 0) {
       tzOffset = dateStr.substring(spaceIndex + 1).trim();
       dateStr = dateStr.substring(0, spaceIndex);
+    } else {
+      // Some non-conforming feeds omit the space before the offset
+      // (YYYYMMDDHHMMSS+HHMM); silently dropping it would shift every
+      // programme by the full offset.
+      final offsetMatch = RegExp(r'([+-]\d{4})$').firstMatch(dateStr);
+      if (offsetMatch != null) {
+        tzOffset = offsetMatch.group(1);
+        dateStr = dateStr.substring(0, offsetMatch.start);
+      }
     }
 
     // Pad to at least 14 characters (YYYYMMDDHHmmss)

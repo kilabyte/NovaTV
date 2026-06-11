@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/error/failures.dart';
 import '../../../../core/utils/app_logger.dart';
 import '../../../playlist/presentation/providers/playlist_providers.dart' show dioProvider, playlistsProvider;
 import '../../data/datasources/epg_local_data_source.dart';
@@ -35,8 +37,11 @@ final epgFetchProvider = FutureProvider.family<void, ({String playlistId, String
   return result.fold((failure) => throw Exception(failure.message), (_) {});
 });
 
-/// Provider for programs of a specific channel
-final channelProgramsProvider = FutureProvider.family<List<Program>, ({String playlistId, String channelId})>((ref, params) async {
+/// Provider for programs of a specific channel.
+/// autoDispose: the EPG sheet that watches this is transient, and a cached
+/// non-autoDispose family entry would pin every opened channel's program
+/// list in memory and serve pre-refresh schedules until restart.
+final channelProgramsProvider = FutureProvider.autoDispose.family<List<Program>, ({String playlistId, String channelId})>((ref, params) async {
   final repository = ref.read(epgRepositoryProvider);
   final result = await repository.getProgramsForChannel(params.playlistId, params.channelId);
   return result.fold((failure) => throw Exception(failure.message), (programs) => programs);
@@ -166,48 +171,107 @@ final programsInRangeProvider = FutureProvider.family<List<Program>, ({String pl
   }
 });
 
-/// Provider for checking if EPG data is valid
+/// Provider for checking if EPG data is valid.
+/// Non-autoDispose family entries are cached for the app's lifetime, and
+/// validity is time-based (fetchedAt < 24h), so callers gating refresh
+/// decisions must ref.invalidate the entry before reading or the first
+/// answer per playlist is frozen forever.
 final hasValidEpgDataProvider = FutureProvider.family<bool, String>((ref, playlistId) async {
   final repository = ref.read(epgRepositoryProvider);
   final result = await repository.hasValidEpgData(playlistId);
   return result.fold((failure) => false, (hasData) => hasData);
 });
 
-/// State notifier for EPG refresh operations
+/// State notifier for EPG refresh operations.
+///
+/// The state tracks the current refresh *batch*: it flips to loading when the
+/// first refresh starts and resolves (data or error) only when the LAST
+/// in-flight refresh completes. With per-refresh transitions, concurrent
+/// multi-playlist refreshes used to assign identical const `AsyncValue.data`
+/// values, so the second completion emitted no notification (listeners like
+/// the TV Guide never invalidated) and a failure could be silently replaced
+/// by another playlist's success.
 class EpgRefreshNotifier extends StateNotifier<AsyncValue<void>> {
   final EpgRepository _repository;
 
   /// In-flight refreshes keyed by playlistId. Used to dedupe concurrent
   /// refresh requests so two callers don't race clear() + putAll() on the
   /// same EPG box and corrupt stored data.
-  final Map<String, Future<void>> _inFlight = {};
+  final Map<String, Future<bool>> _inFlight = {};
+
+  /// CancelTokens for in-flight refreshes keyed by playlistId, so deleting
+  /// a playlist can abort its EPG download instead of letting it run on.
+  final Map<String, CancelToken> _cancelTokens = {};
+
+  /// Failures accumulated during the current batch, keyed by playlistId.
+  final Map<String, String> _failures = {};
 
   EpgRefreshNotifier(this._repository) : super(const AsyncValue.data(null));
 
   /// Refresh EPG data from remote source
   /// Network fetch and XML parsing run in background threads to prevent UI blocking
   /// XML parsing uses compute isolate (handled in xmltv_parser.dart)
-  Future<void> refreshEpg(String playlistId, String url) async {
+  ///
+  /// Returns true when the refresh succeeded. Never throws: failures are
+  /// reported via the returned bool and the notifier's batch error state, so
+  /// fire-and-forget callers can't produce unhandled async errors.
+  Future<bool> refreshEpg(String playlistId, String url) {
     final existing = _inFlight[playlistId];
     if (existing != null) return existing;
 
-    state = const AsyncValue.loading();
-    final future = _doRefresh(playlistId, url);
-    _inFlight[playlistId] = future;
-    try {
-      await future;
-    } finally {
-      _inFlight.remove(playlistId);
+    if (_inFlight.isEmpty) {
+      _failures.clear();
+      state = const AsyncValue.loading();
     }
+    final token = CancelToken();
+    _cancelTokens[playlistId] = token;
+    final future = _doRefresh(playlistId, url, token);
+    _inFlight[playlistId] = future;
+    return future;
   }
 
-  Future<void> _doRefresh(String playlistId, String url) async {
-    final result = await Future(() => _repository.fetchAndStoreEpg(playlistId, url));
-    if (!mounted) return;
-    state = result.fold(
-      (failure) => AsyncValue.error(failure.message, StackTrace.current),
-      (_) => const AsyncValue.data(null),
-    );
+  /// Abort the in-flight EPG refresh for [playlistId], if any (e.g. the
+  /// playlist was deleted). The cancelled refresh resolves silently: no
+  /// failure is recorded and no error state is emitted.
+  void cancelRefresh(String playlistId) {
+    _cancelTokens[playlistId]?.cancel('Playlist deleted');
+  }
+
+  Future<bool> _doRefresh(String playlistId, String url, CancelToken token) async {
+    var ok = false;
+    var cancelled = false;
+    try {
+      final result = await Future(() => _repository.fetchAndStoreEpg(playlistId, url, cancelToken: token));
+      result.fold(
+        (failure) {
+          // A cancelled refresh is deliberate (playlist deleted); dropping
+          // it must not surface as a user-facing error. CancelledFailure
+          // covers the refresh that started AFTER the delete (its token was
+          // never cancelled but the repository discarded the data).
+          cancelled = token.isCancelled || failure is CancelledFailure;
+          if (!cancelled) _failures[playlistId] = failure.message;
+        },
+        (_) => ok = true,
+      );
+    } catch (e) {
+      // The repository only catches Exceptions; Errors thrown by the fetch or
+      // the parse isolate would otherwise reject this future.
+      if (token.isCancelled) {
+        cancelled = true;
+      } else {
+        _failures[playlistId] = e.toString();
+      }
+    } finally {
+      _cancelTokens.remove(playlistId);
+      _inFlight.remove(playlistId);
+      if (_inFlight.isEmpty && mounted) {
+        state = _failures.isEmpty
+            ? const AsyncValue.data(null)
+            : AsyncValue.error(_failures.values.join('; '), StackTrace.current);
+      }
+    }
+    // Cancellation is not a failure callers should report either.
+    return ok || cancelled;
   }
 
   Future<void> cleanupOldPrograms({int daysToKeep = 7}) async {

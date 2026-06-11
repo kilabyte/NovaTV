@@ -1,6 +1,3 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:xml/xml.dart';
 
@@ -12,20 +9,22 @@ import '../compute/xml_parse_compute.dart';
 /// Parser for XMLTV EPG data format
 /// Supports both plain .xml and compressed .xml.gz files
 class XmltvParser {
-  /// Parse XMLTV content from raw bytes (handles gzip decompression)
+  /// Parse XMLTV content from a file on disk (handles gzip decompression).
+  /// Only the path crosses the isolate boundary: the compute isolate reads,
+  /// gunzips and decodes the file itself, so the main isolate never holds
+  /// the raw feed or the decompressed string (hundreds of MB for real
+  /// provider feeds).
+  Future<EpgData> parseFile(String filePath, String sourceUrl) async {
+    final result = await compute(parseXmltvContent, ParseXmltvParams(filePath: filePath, sourceUrl: sourceUrl));
+    return _epgDataFromResult(result);
+  }
+
+  /// Parse XMLTV content from raw bytes already in memory (handles gzip
+  /// decompression inside the compute isolate). Prefer [parseFile] for
+  /// downloads so the full feed never lives on the main isolate.
   Future<EpgData> parseBytes(Uint8List bytes, String sourceUrl) async {
-    String content;
-
-    // Check for gzip magic bytes
-    if (bytes.length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b) {
-      // Gzip compressed
-      content = utf8.decode(gzip.decode(bytes));
-    } else {
-      // Plain XML
-      content = utf8.decode(bytes);
-    }
-
-    return parse(content, sourceUrl);
+    final result = await compute(parseXmltvContent, ParseXmltvParams(bytes: bytes, sourceUrl: sourceUrl));
+    return _epgDataFromResult(result);
   }
 
   /// Parse XMLTV content from a string
@@ -34,8 +33,11 @@ class XmltvParser {
     // Use compute isolate for heavy XML parsing (especially for large EPG files)
     // This prevents UI freezing on Android when parsing thousands of programs
     final result = await compute(parseXmltvContent, ParseXmltvParams(content: content, sourceUrl: sourceUrl));
+    return _epgDataFromResult(result);
+  }
 
-    // Reconstruct EpgData from JSON result
+  /// Reconstruct EpgData from the compute isolate's JSON result
+  EpgData _epgDataFromResult(Map<String, dynamic> result) {
     final channels = (result['channels'] as List).map((json) {
       return EpgChannel(id: json['id'] as String, displayName: json['displayName'] as String?, iconUrl: json['iconUrl'] as String?, url: json['url'] as String?);
     }).toList();

@@ -3,6 +3,7 @@ import 'package:hive_ce/hive.dart';
 
 import '../../../../core/storage/hive_index_helper.dart';
 import '../../../../core/storage/hive_storage.dart';
+import '../../../../core/utils/app_logger.dart';
 import '../../domain/entities/epg_channel.dart';
 import '../../domain/entities/program.dart';
 import '../models/epg_channel_model.dart';
@@ -49,33 +50,44 @@ class EpgLocalDataSourceImpl implements EpgLocalDataSource {
 
   @override
   Future<void> saveEpgData({required String playlistId, required String sourceUrl, required DateTime? generatedAt, required List<EpgChannel> channels, required List<Program> programs}) async {
-    // Save programs
-    final programsBox = await safeOpenBox<ProgramModel>('$_programsBoxPrefix$playlistId');
-    await programsBox.clear();
+    // Save programs. Write the new entries first, then remove only the stale
+    // keys: ids are deterministic (channelId_startMs), so a crash mid-save
+    // leaves a superset of valid data instead of an empty box, and readers
+    // never observe an empty guide during a refresh.
+    final boxName = '$_programsBoxPrefix$playlistId';
+    final programsBox = await safeOpenBox<ProgramModel>(boxName);
 
     final programModels = programs.map((p) => ProgramModel.fromEntity(p)).toList();
     final programMap = {for (var p in programModels) p.id: p};
     await programsBox.putAll(programMap);
 
-    // Save channels
+    final stalePrograms = programsBox.keys.where((key) => !programMap.containsKey(key)).toList(growable: false);
+    if (stalePrograms.isNotEmpty) {
+      await programsBox.deleteAll(stalePrograms);
+    }
+
+    // Save channels (same put-then-prune pattern)
     final channelsBox = await safeOpenBox<EpgChannelModel>('$_channelsBoxPrefix$playlistId');
-    await channelsBox.clear();
 
     final channelModels = channels.map((c) => EpgChannelModel.fromEntity(c)).toList();
     final channelMap = {for (var c in channelModels) c.id: c};
     await channelsBox.putAll(channelMap);
+
+    final staleChannels = channelsBox.keys.where((key) => !channelMap.containsKey(key)).toList(growable: false);
+    if (staleChannels.isNotEmpty) {
+      await channelsBox.deleteAll(staleChannels);
+    }
 
     // Save metadata
     final metadataBox = await safeOpenBox<EpgMetadataModel>(_metadataBoxName);
     final metadata = EpgMetadataModel(sourceUrl: sourceUrl, playlistId: playlistId, generatedAt: generatedAt, fetchedAt: DateTime.now(), channelCount: channels.length, programCount: programs.length);
     await metadataBox.put(playlistId, metadata);
 
-    // Build indexes for programs (runs in background to not block save operation)
-    final boxName = '$_programsBoxPrefix$playlistId';
-    _buildProgramIndexes(boxName, programModels).catchError((error) {
-      // Index building is optional - log but don't fail the save operation
-      // Error will be logged by AppLogger if available
-    });
+    // Rebuild indexes before returning so readers invalidated after this save
+    // never query an index that still points at the previous refresh. The
+    // heavy grouping runs in a compute isolate; failures are logged and
+    // non-fatal (readers fall back to full scans).
+    await _buildProgramIndexes(boxName, programModels);
   }
 
   @override
@@ -215,6 +227,11 @@ class EpgLocalDataSourceImpl implements EpgLocalDataSource {
       await channelsBox.deleteFromDisk();
     }
 
+    // Delete program index boxes too; otherwise they leak on disk for every
+    // removed playlist and can serve stale keys to a future box reusing the id
+    await HiveIndexHelper.deleteIndex(baseBoxName: '$_programsBoxPrefix$playlistId', fieldName: 'channelId');
+    await HiveIndexHelper.deleteIndex(baseBoxName: '$_programsBoxPrefix$playlistId', fieldName: 'startDate');
+
     // Delete metadata
     final metadataBox = await safeOpenBox<EpgMetadataModel>(_metadataBoxName);
     await metadataBox.delete(playlistId);
@@ -251,9 +268,20 @@ class EpgLocalDataSourceImpl implements EpgLocalDataSource {
 
     final box = await safeOpenBox<ProgramModel>('$_programsBoxPrefix$playlistId');
 
+    // Snapshot the values so concurrent saves can't invalidate the iterator,
+    // then yield to the event loop periodically: this scan runs on the main
+    // isolate per debounced query and large EPG boxes hold hundreds of
+    // thousands of entries, which would otherwise hold a frame hostage.
+    final snapshot = box.values.toList(growable: false);
+    const yieldEvery = 2000;
+    var scanned = 0;
+
     // Filter on the model, only hydrate matches.
     final models = <ProgramModel>[];
-    for (final model in box.values) {
+    for (final model in snapshot) {
+      if (++scanned % yieldEvery == 0) {
+        await Future<void>.delayed(Duration.zero);
+      }
       if (model.end.isBefore(now)) continue;
 
       final title = model.title.toLowerCase();
@@ -269,29 +297,40 @@ class EpgLocalDataSourceImpl implements EpgLocalDataSource {
     return models.map((m) => m.toEntity()).toList(growable: false);
   }
 
-  /// Build indexes for programs in a playlist.
-  /// The tuple extraction runs in a compute isolate so we don't burn the main
-  /// isolate grouping hundreds of thousands of entries after each EPG refresh.
+  /// Build indexes for programs in a playlist, logging (not rethrowing)
+  /// failures: indexes are optional and readers fall back to full scans, but
+  /// a silent failure would leave the staleness invisible.
   Future<void> _buildProgramIndexes(String programsBoxName, List<ProgramModel> programs) async {
     try {
-      // Convert to plain data before sending to the isolate; HiveObjects hold
-      // a reference to their box and can't cross isolate boundaries.
-      final tuples = programs
-          .map((p) => _IndexTuple(p.id, p.channelId, p.start.year, p.start.month, p.start.day))
-          .toList(growable: false);
-
-      final result = await compute(_computeProgramIndexes, tuples);
-
-      final channelIdIndexBox = await safeOpenBox<List<dynamic>>('${programsBoxName}_index_channelId');
-      await channelIdIndexBox.clear();
-      await channelIdIndexBox.putAll(result.channelIdIndex);
-
-      final dateIndexBox = await safeOpenBox<List<dynamic>>('${programsBoxName}_index_startDate');
-      await dateIndexBox.clear();
-      await dateIndexBox.putAll(result.dateIndex);
-    } catch (_) {
-      // Index building is optional - don't throw.
+      await rebuildProgramIndexes(programsBoxName, programs);
+    } catch (e) {
+      AppLogger.warning('Failed to build EPG program indexes for $programsBoxName: $e');
     }
+  }
+
+  /// Rebuild both program indexes for [programsBoxName].
+  /// The tuple extraction runs in a compute isolate so we don't burn the main
+  /// isolate grouping hundreds of thousands of entries after each EPG refresh.
+  /// Also reused by IndexService for startup/resume rebuilds. Throws on
+  /// failure; callers decide whether that is fatal.
+  static Future<void> rebuildProgramIndexes(String programsBoxName, List<ProgramModel> programs) async {
+    // Convert to plain data before sending to the isolate; HiveObjects hold
+    // a reference to their box and can't cross isolate boundaries.
+    final tuples = programs
+        .map((p) => _IndexTuple(p.id, p.channelId, p.start.year, p.start.month, p.start.day))
+        .toList(growable: false);
+
+    final result = await compute(_computeProgramIndexes, tuples);
+
+    final channelIdIndexBox = await safeOpenBox<List<dynamic>>('${programsBoxName}_index_channelId');
+    await channelIdIndexBox.clear();
+    await channelIdIndexBox.putAll(result.channelIdIndex);
+    await HiveIndexHelper.markIndexComplete(channelIdIndexBox);
+
+    final dateIndexBox = await safeOpenBox<List<dynamic>>('${programsBoxName}_index_startDate');
+    await dateIndexBox.clear();
+    await dateIndexBox.putAll(result.dateIndex);
+    await HiveIndexHelper.markIndexComplete(dateIndexBox);
   }
 }
 

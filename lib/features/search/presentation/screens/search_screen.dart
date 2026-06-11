@@ -75,6 +75,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             child: query.isEmpty || query.length < 2
                 ? _buildEmptyState()
                 : searchResults.when(
+                    // Keep previous results visible while the debounced
+                    // search reruns; otherwise every keystroke tears the list
+                    // down to a spinner for 250ms+ and churns all the tiles.
+                    skipLoadingOnReload: true,
                     data: (results) {
                       if (results.isEmpty) {
                         return _buildNoResultsState();
@@ -291,8 +295,9 @@ class _SearchResultTileState extends ConsumerState<_SearchResultTile> {
 
   @override
   Widget build(BuildContext context) {
-    final favorites = ref.watch(favoriteChannelsProvider);
-    final isFavorite = favorites.maybeWhen(data: (favs) => favs.any((c) => c.id == _channel.id), orElse: () => false);
+    // O(1) per-row favorite lookup; watching the full favorites list here
+    // rebuilt every tile on any favorites change with an O(N) scan each.
+    final isFavorite = ref.watch(isFavoriteProvider(_channel.id)).valueOrNull ?? false;
 
     final isProgramResult = widget.result is ProgramSearchResult;
 
@@ -397,8 +402,12 @@ class _SearchResultTileState extends ConsumerState<_SearchResultTile> {
       );
     }
 
-    // Channel result - show current program if available
-    final currentProgram = ref.watch(currentProgramProvider((playlistId: _channel.playlistId, channelId: _channel.epgId)));
+    // Channel result - show current program if available. Uses the batched
+    // per-playlist map (one Hive fetch per playlist/minute) instead of a
+    // per-tile query that can degrade to a full program-box scan.
+    final currentProgram = ref
+        .watch(currentProgramsProvider(_channel.playlistId))
+        .whenData((map) => map[_channel.epgId.toLowerCase()]);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

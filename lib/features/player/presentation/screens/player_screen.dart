@@ -64,6 +64,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       DeviceOrientation.portraitDown,
     ]);
 
+    // The user can back out during the awaits above; ref on a disposed
+    // ConsumerState throws.
+    if (!mounted) return;
+
     // Use global player provider
     final playerState = ref.read(playerProvider);
 
@@ -74,6 +78,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // Already playing this channel, just expand it
       ref.read(playerProvider.notifier).expand();
     }
+
+    if (!mounted) return;
 
     // Start controls auto-hide timer
     _startControlsTimer();
@@ -231,8 +237,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               () => ref.read(playerProvider.notifier).togglePlayPause(),
           const SingleActivator(LogicalKeyboardKey.mediaPlayPause):
               () => ref.read(playerProvider.notifier).togglePlayPause(),
+          // Stop must also leave the screen; stop() alone resets state to
+          // empty and the build would strand the user on the loading spinner.
           const SingleActivator(LogicalKeyboardKey.mediaStop):
-              () => ref.read(playerProvider.notifier).stop(),
+              () => _closePlayer(),
         },
         child: Focus(
           autofocus: true,

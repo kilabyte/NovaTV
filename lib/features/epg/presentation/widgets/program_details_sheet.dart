@@ -226,8 +226,10 @@ class ProgramDetailsSheet extends StatelessWidget {
                     label: const Text('Watch Now'),
                   ),
                 ),
-              if (!program.isCurrentlyAiring && program.isUpcoming && onSetReminder != null) ...[
-                if (program.isCurrentlyAiring) const SizedBox(width: 12),
+              // The guards make the two buttons mutually exclusive (Watch Now
+              // requires a currently-airing program, Remind Me an upcoming
+              // one), so no spacer between them is needed.
+              if (!program.isCurrentlyAiring && program.isUpcoming && onSetReminder != null)
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: onSetReminder,
@@ -235,7 +237,6 @@ class ProgramDetailsSheet extends StatelessWidget {
                     label: const Text('Remind Me'),
                   ),
                 ),
-              ],
             ],
           ),
           const SizedBox(height: 8),

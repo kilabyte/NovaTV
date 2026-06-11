@@ -156,13 +156,35 @@ class PlaylistLocalDataSourceImpl implements PlaylistLocalDataSource {
     try {
       final box = await channelBox;
 
-      // Delete existing channels for this playlist (no per-channel index writes).
-      final existingKeys = box.keys.where((key) => box.get(key)?.playlistId == playlistId).toList();
-      await box.deleteAll(existingKeys);
+      // Find this playlist's existing keys via the playlistId index (kept
+      // current by _rebuildChannelIndexes) instead of a full-box scan.
+      final indexed = await HiveIndexHelper.getIndexedKeys(
+        baseBoxName: _channelBoxName,
+        fieldName: 'playlistId',
+        fieldValue: playlistId,
+      );
+      final existingKeys = indexed.isNotEmpty
+          ? indexed.toList()
+          : box.keys.where((key) => box.get(key)?.playlistId == playlistId).toList();
 
-      // Write the new channels in a single bulk put.
-      final entries = {for (var c in channels) c.id: c};
+      // Re-apply any favorite toggle that landed after the caller took its
+      // snapshot (refresh holds a snapshot across long awaits); the box value
+      // is always the latest user intent because parsing never sets it.
+      final entries = <String, ChannelModel>{};
+      for (final c in channels) {
+        final existing = box.get(c.id);
+        entries[c.id] = (existing == null || existing.isFavorite == c.isFavorite)
+            ? c
+            : c.copyWith(isFavorite: existing.isFavorite);
+      }
+
+      // Write the new channels first, then delete only the stale keys.
+      // Channel IDs are deterministic, so put-then-prune avoids both the
+      // crash-loses-everything window and readers seeing an empty playlist
+      // mid-refresh (the previous deleteAll-then-putAll did neither).
       await box.putAll(entries);
+      final staleKeys = existingKeys.where((key) => !entries.containsKey(key)).toList();
+      await box.deleteAll(staleKeys);
 
       // Rebuild the group and isFavorite indexes for the entire channel box in
       // one pass. Doing this per-channel (the previous behavior) caused 10k+

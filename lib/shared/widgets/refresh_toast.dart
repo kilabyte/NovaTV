@@ -54,10 +54,20 @@ class RefreshState {
 class RefreshNotifier extends StateNotifier<RefreshState> {
   Timer? _hideTimer;
 
+  // Per-phase outcomes for the current batch. A phase that completes with a
+  // failure while the other phase is still in flight must be remembered;
+  // previously the failure was discarded and the batch ended with a green
+  // 'Refresh complete' toast.
+  bool _playlistFailed = false;
+  bool _epgFailed = false;
+
   RefreshNotifier() : super(const RefreshState());
 
   void startPlaylistRefresh() {
     _hideTimer?.cancel();
+    // New batch: forget the other phase's outcome from a previous batch.
+    if (!state.isRefreshing) _epgFailed = false;
+    _playlistFailed = false;
     state = state.copyWith(
       isRefreshingPlaylist: true,
       isSuccess: false,
@@ -67,6 +77,8 @@ class RefreshNotifier extends StateNotifier<RefreshState> {
 
   void startEpgRefresh() {
     _hideTimer?.cancel();
+    if (!state.isRefreshing) _playlistFailed = false;
+    _epgFailed = false;
     state = state.copyWith(
       isRefreshingEpg: true,
       isSuccess: false,
@@ -75,19 +87,25 @@ class RefreshNotifier extends StateNotifier<RefreshState> {
   }
 
   void completePlaylistRefresh({bool success = true}) {
+    _playlistFailed = !success;
+    final epgStillRunning = state.isRefreshingEpg;
+    final anyFailed = _playlistFailed || _epgFailed;
     state = state.copyWith(
       isRefreshingPlaylist: false,
-      isSuccess: success && !state.isRefreshingEpg,
-      isError: !success && !state.isRefreshingEpg,
+      isSuccess: !epgStillRunning && !anyFailed,
+      isError: !epgStillRunning && anyFailed,
     );
     _scheduleHide();
   }
 
   void completeEpgRefresh({bool success = true}) {
+    _epgFailed = !success;
+    final playlistStillRunning = state.isRefreshingPlaylist;
+    final anyFailed = _playlistFailed || _epgFailed;
     state = state.copyWith(
       isRefreshingEpg: false,
-      isSuccess: success && !state.isRefreshingPlaylist,
-      isError: !success && !state.isRefreshingPlaylist,
+      isSuccess: !playlistStillRunning && !anyFailed,
+      isError: !playlistStillRunning && anyFailed,
     );
     _scheduleHide();
   }

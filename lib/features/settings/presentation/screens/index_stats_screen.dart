@@ -25,6 +25,8 @@ class _IndexStatsScreenState extends ConsumerState<IndexStatsScreen> {
   Future<void> _loadStatistics() async {
     setState(() => _isLoading = true);
     final stats = await IndexService.getStatistics();
+    // Counting every box can take seconds; the user may have backed out.
+    if (!mounted) return;
     setState(() {
       _stats = stats;
       _isLoading = false;
@@ -34,6 +36,7 @@ class _IndexStatsScreenState extends ConsumerState<IndexStatsScreen> {
   Future<void> _rebuildIndexes() async {
     setState(() => _isLoading = true);
     await IndexService.buildAllIndexes();
+    if (!mounted) return;
     await _loadStatistics();
 
     if (mounted) {

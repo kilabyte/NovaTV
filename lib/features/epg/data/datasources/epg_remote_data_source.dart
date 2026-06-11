@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 
@@ -10,34 +10,59 @@ import '../parsers/xmltv_parser.dart';
 abstract class EpgRemoteDataSource {
   /// Fetch and parse EPG data from a URL
   /// Supports both .xml and .xml.gz formats
-  Future<EpgData> fetchEpg(String url);
+  /// Pass [cancelToken] to allow aborting an in-flight download (e.g. when
+  /// the playlist is deleted or the app is backgrounded).
+  Future<EpgData> fetchEpg(String url, {CancelToken? cancelToken});
 }
 
 class EpgRemoteDataSourceImpl implements EpgRemoteDataSource {
+  /// Overall deadline for the whole download. Dio's receiveTimeout only
+  /// bounds the gap between chunks, so a server trickling bytes would
+  /// otherwise keep the request alive indefinitely.
+  static const Duration _overallDeadline = Duration(minutes: 15);
+
   final Dio _dio;
   final XmltvParser _parser;
 
   EpgRemoteDataSourceImpl({Dio? dio, XmltvParser? parser}) : _dio = dio ?? Dio(), _parser = parser ?? XmltvParser();
 
   @override
-  Future<EpgData> fetchEpg(String url) async {
+  Future<EpgData> fetchEpg(String url, {CancelToken? cancelToken}) async {
+    final token = cancelToken ?? CancelToken();
+    // Stream the (possibly gzipped) response to a temp file chunk by chunk
+    // instead of buffering it with ResponseType.bytes: main-isolate memory
+    // during an EPG refresh stays at chunk size, never the full feed. The
+    // compute isolate then reads and decodes the file itself.
+    final tempDir = await Directory.systemTemp.createTemp('novatv_epg_');
+    final tempFile = File('${tempDir.path}${Platform.pathSeparator}epg.dat');
     try {
-      final response = await _dio.get<List<int>>(
-        url,
-        options: Options(responseType: ResponseType.bytes, receiveTimeout: const Duration(minutes: 5), headers: {'Accept': 'application/xml, text/xml, application/gzip, */*', 'Accept-Encoding': 'gzip, deflate'}),
-      );
+      final response = await _dio
+          .download(
+            url,
+            tempFile.path,
+            options: Options(receiveTimeout: const Duration(minutes: 5), headers: {'Accept': 'application/xml, text/xml, application/gzip, */*', 'Accept-Encoding': 'gzip, deflate'}),
+            cancelToken: token,
+          )
+          .timeout(_overallDeadline, onTimeout: () {
+            token.cancel('EPG download exceeded ${_overallDeadline.inMinutes} minute deadline');
+            throw const NetworkException('EPG fetch timed out');
+          });
 
       if (response.statusCode != 200) {
         throw NetworkException('Failed to fetch EPG: HTTP ${response.statusCode}');
       }
 
-      final bytes = Uint8List.fromList(response.data ?? []);
-      if (bytes.isEmpty) {
+      if (!await tempFile.exists() || await tempFile.length() == 0) {
         throw const NetworkException('EPG response is empty');
       }
 
-      return await _parser.parseBytes(bytes, url);
+      // Gzip detection, encoding-declaration handling and XML parsing all
+      // happen inside the compute isolate, which reads the file itself.
+      return await _parser.parseFile(tempFile.path, url);
     } on DioException catch (e) {
+      if (e.type == DioExceptionType.cancel) {
+        throw const NetworkException('EPG fetch cancelled');
+      }
       if (e.type == DioExceptionType.connectionTimeout || e.type == DioExceptionType.receiveTimeout) {
         throw const NetworkException('EPG fetch timed out');
       }
@@ -47,6 +72,11 @@ class EpgRemoteDataSourceImpl implements EpgRemoteDataSource {
       throw NetworkException('Failed to fetch EPG: ${e.message}');
     } on FormatException catch (e) {
       throw NetworkException('Invalid EPG format: ${e.message}');
+    } finally {
+      // Always remove the temp file, including on error, timeout and cancel.
+      try {
+        await tempDir.delete(recursive: true);
+      } catch (_) {}
     }
   }
 }

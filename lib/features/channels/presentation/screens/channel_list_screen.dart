@@ -42,15 +42,13 @@ class ChannelListScreen extends ConsumerWidget {
                   return _EmptyState(hasPlaylist: playlistsAsync.valueOrNull?.isNotEmpty ?? false);
                 }
 
-                final playlistId = playlistsAsync.valueOrNull?.firstOrNull?.id ?? '';
-
                 return ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   itemCount: channels.length,
                   itemBuilder: (context, index) {
                     // Wrap in RepaintBoundary to isolate repaints and improve scrolling performance
                     return RepaintBoundary(
-                      child: _ChannelRow(channel: channels[index], playlistId: playlistId),
+                      child: _ChannelRow(channel: channels[index]),
                     );
                   },
                 );
@@ -127,9 +125,8 @@ class _ChannelHeader extends StatelessWidget {
 
 class _ChannelRow extends ConsumerStatefulWidget {
   final Channel channel;
-  final String playlistId;
 
-  const _ChannelRow({required this.channel, required this.playlistId});
+  const _ChannelRow({required this.channel});
 
   @override
   ConsumerState<_ChannelRow> createState() => _ChannelRowState();
@@ -142,9 +139,11 @@ class _ChannelRowState extends ConsumerState<_ChannelRow> {
   Widget build(BuildContext context) {
     // Use the batched current-programs provider so every row in a long list
     // shares a single Hive fetch per playlist/minute instead of each one
-    // hitting the repo.
-    final epgId = (widget.channel.tvgId ?? widget.channel.id).toLowerCase();
-    final programAsync = ref.watch(currentProgramsProvider(widget.playlistId))
+    // hitting the repo. Keyed by the channel's OWN playlist: this list spans
+    // all playlists, so using the first playlist's id left every other
+    // playlist's rows without program info.
+    final epgId = widget.channel.epgId.toLowerCase();
+    final programAsync = ref.watch(currentProgramsProvider(widget.channel.playlistId))
         .whenData((map) => map[epgId]);
 
     final isFavorite = ref.watch(isFavoriteProvider(widget.channel.id)).valueOrNull ?? false;
@@ -256,7 +255,12 @@ class _ChannelRowState extends ConsumerState<_ChannelRow> {
                 GestureDetector(
                   onTap: () {
                     HapticFeedback.selectionClick();
-                    ref.read(toggleFavoriteProvider(widget.channel.id));
+                    // Call the notifier directly (matching every other call
+                    // site): the old toggleFavoriteProvider was a cached
+                    // Provider.family whose side effect ran once per channel
+                    // per session, so the star silently stopped working after
+                    // the first tap.
+                    ref.read(favoriteNotifierProvider.notifier).toggleFavorite(widget.channel.id);
                   },
                   child: Icon(isFavorite ? Icons.star_rounded : Icons.star_outline_rounded, size: 20, color: isFavorite ? AppColors.favorite : AppColors.textMuted),
                 ),

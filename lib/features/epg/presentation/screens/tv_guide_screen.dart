@@ -300,7 +300,6 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
   @override
   Widget build(BuildContext context) {
     final channelsAsync = ref.watch(allChannelsProvider);
-    final selectedDate = ref.watch(selectedDateProvider);
     final selectedGroup = ref.watch(tvGuideSelectedGroupProvider);
     final groupsAsync = ref.watch(channelGroupsProvider);
     // Rebuild once per minute so the airing highlight, progress fills, LIVE
@@ -371,7 +370,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       body: Column(
         children: [
           // Header
-          _buildHeader(context, groupsAsync, selectedGroup, selectedDate),
+          _buildHeader(context, groupsAsync, selectedGroup),
           // Main content
           Expanded(
             child: channelsAsync.when(
@@ -394,7 +393,9 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, AsyncValue<List<String>> groupsAsync, String? selectedGroup, DateTime selectedDate) {
+  Widget _buildHeader(BuildContext context, AsyncValue<List<String>> groupsAsync, String? selectedGroup) {
+    // Date navigation lives in the date-picker icon button; the old chip row
+    // was dropped to give the program grid more vertical space.
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -402,30 +403,21 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       ),
       child: SafeArea(
         bottom: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Title bar
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
-              child: Row(
-                children: [
-                  Text(
-                    'TV Guide',
-                    style: TextStyle(color: AppColors.textPrimary, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: -0.5),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(child: _buildCategoryDropdown(context, groupsAsync, selectedGroup)),
-                  _IconButton(icon: Icons.today_rounded, onTap: () => _showDatePicker(context), tooltip: 'Select date'),
-                  _IconButton(icon: Icons.my_location_rounded, onTap: _scrollToCurrentTime, tooltip: 'Go to now'),
-                  _IconButton(icon: Icons.refresh_rounded, onTap: () => _refreshEpg(context), tooltip: 'Refresh EPG'),
-                ],
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
+          child: Row(
+            children: [
+              Text(
+                'TV Guide',
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: -0.5),
               ),
-            ),
-            // Date selector
-            _buildDateSelector(context, selectedDate),
-            const SizedBox(height: 8),
-          ],
+              const SizedBox(width: 16),
+              Expanded(child: _buildCategoryDropdown(context, groupsAsync, selectedGroup)),
+              _IconButton(icon: Icons.today_rounded, onTap: () => _showDatePicker(context), tooltip: 'Select date'),
+              _IconButton(icon: Icons.my_location_rounded, onTap: _scrollToCurrentTime, tooltip: 'Go to now'),
+              _IconButton(icon: Icons.refresh_rounded, onTap: () => _refreshEpg(context), tooltip: 'Refresh EPG'),
+            ],
+          ),
         ),
       ),
     );
@@ -481,43 +473,6 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       },
       loading: () => SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary))),
       error: (_, __) => const SizedBox.shrink(),
-    );
-  }
-
-  Widget _buildDateSelector(BuildContext context, DateTime selectedDate) {
-    final dateFormat = DateFormat.E();
-    final dates = List.generate(_daysToShow, (i) {
-      return _baseDate.add(Duration(days: i));
-    });
-
-    return SizedBox(
-      // 48 leaves real slack for the chips (36px content + border); at 44
-      // they fit with zero margin and Android's font metrics clipped the
-      // bottom edge.
-      height: 48,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        itemCount: dates.length,
-        itemBuilder: (context, index) {
-          final date = dates[index];
-          final isSelected = date.year == selectedDate.year && date.month == selectedDate.month && date.day == selectedDate.day;
-          final isToday = date.year == DateTime.now().year && date.month == DateTime.now().month && date.day == DateTime.now().day;
-
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: _DateChip(
-              date: date,
-              label: isToday ? 'Today' : dateFormat.format(date),
-              isSelected: isSelected,
-              onTap: () {
-                ref.read(selectedDateProvider.notifier).state = date;
-                _scrollToDate(date);
-              },
-            ),
-          );
-        },
-      ),
     );
   }
 
@@ -1261,59 +1216,6 @@ class _IconButtonState extends State<_IconButton> {
             margin: const EdgeInsets.symmetric(horizontal: 2),
             decoration: BoxDecoration(color: _isHovered ? AppColors.surfaceHover : Colors.transparent, borderRadius: BorderRadius.circular(8)),
             child: Icon(widget.icon, color: _isHovered ? AppColors.primary : AppColors.textSecondary, size: 22),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DateChip extends StatefulWidget {
-  final DateTime date;
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _DateChip({required this.date, required this.label, required this.isSelected, required this.onTap});
-
-  @override
-  State<_DateChip> createState() => _DateChipState();
-}
-
-class _DateChipState extends State<_DateChip> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return TvFocusable(
-      onTap: widget.onTap,
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _isHovered = true),
-        onExit: (_) => setState(() => _isHovered = false),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: widget.isSelected
-                ? AppColors.primary
-                : _isHovered
-                ? AppColors.surfaceHover
-                : AppColors.surfaceElevated,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: widget.isSelected ? AppColors.primary : AppColors.border),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                widget.label,
-                style: TextStyle(color: widget.isSelected ? Colors.black : AppColors.textPrimary, fontSize: 13, fontWeight: widget.isSelected ? FontWeight.w700 : FontWeight.w500),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                '${widget.date.day}',
-                style: TextStyle(color: widget.isSelected ? Colors.black.withValues(alpha: 0.7) : AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
-              ),
-            ],
           ),
         ),
       ),

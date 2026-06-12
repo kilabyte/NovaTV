@@ -661,10 +661,17 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         AppLogger.warning('mpv setProperty $name=$value failed: $e');
       });
     }
+    // Large buffer: keep up to 2 minutes / 256 MiB of stream ahead of the
+    // playhead so throughput dips and server hiccups drain the cushion
+    // instead of skipping. Live streams can only buffer as fast as they
+    // arrive, but the headroom means every byte the server sends early is
+    // kept. These are caps, not upfront allocations, so memory only grows
+    // with what is actually buffered.
     setProp('cache', 'yes');
-    setProp('cache-secs', '30');
-    setProp('demuxer-max-bytes', '67108864'); // 64 MiB forward buffer
-    setProp('demuxer-readahead-secs', '20');
+    setProp('cache-secs', '120');
+    setProp('demuxer-max-bytes', '268435456'); // 256 MiB forward buffer
+    setProp('demuxer-max-back-bytes', '67108864'); // 64 MiB behind playhead
+    setProp('demuxer-readahead-secs', '120');
     setProp('network-timeout', '10');
     // FFmpeg HTTP reconnect on dropout — critical for IPTV.
     setProp('stream-lavf-o', 'reconnect=1,reconnect_streamed=1,reconnect_delay_max=5');
@@ -673,11 +680,11 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     // Seeks resolve within the demuxer cache configured above.
     setProp('force-seekable', 'yes');
     // Auto-rebuffer to keep the stream alive: on cache underrun, pause and
-    // refill for a couple of seconds instead of stuttering until the
-    // connection dies. Initial buffering smooths the first seconds too.
+    // refill a real cushion instead of resuming immediately and stuttering
+    // again. Initial buffering smooths the first seconds too.
     setProp('cache-pause', 'yes');
     setProp('cache-pause-initial', 'yes');
-    setProp('cache-pause-wait', '2');
+    setProp('cache-pause-wait', '4');
   }
 
   @override

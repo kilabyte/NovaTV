@@ -622,11 +622,11 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       // heals itself (no drop errors for a while and playback running);
       // escalate to a reopen only after a sustained stall, i.e. the cache
       // ran dry and is not refilling.
-      // The stall threshold must exceed cache-pause-wait (4s in
+      // The stall threshold must exceed cache-pause-wait (10s in
       // _applyMpvIptvTuning) or a healthy rebuffer pause would alias into
       // an unnecessary reopen.
       var stalledSeconds = 0;
-      for (var i = 0; i < 150 && stalledSeconds < 8; i++) {
+      for (var i = 0; i < 150 && stalledSeconds < 14; i++) {
         await Future<void>.delayed(const Duration(seconds: 1));
         if (!mounted || !identical(state.player, player)) return;
         if (_userPaused) {
@@ -739,6 +739,12 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     setProp('demuxer-max-back-bytes', '67108864'); // 64 MiB behind playhead
     setProp('demuxer-readahead-secs', '120');
     setProp('network-timeout', '10');
+    // Join HLS live streams a few segments behind the live edge: each
+    // segment is typically 4-10s, so starting six back banks a 20-60s
+    // cushion immediately instead of playing at the bleeding edge where
+    // any throughput dip is an instant rebuffer. ffmpeg clamps this to the
+    // playlist's oldest segment, so short playlists just start earliest.
+    setProp('demuxer-lavf-o', 'live_start_index=-6');
     // FFmpeg HTTP reconnect on dropout — critical for IPTV. reconnect=1
     // covers read errors/premature EOF only; reconnect_on_network_error
     // adds TCP/TLS connect failures. HTTP 4xx/5xx stay fatal on purpose:
@@ -749,12 +755,17 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     // ("you can force it with --force-seekable=yes") instead of playing.
     // Seeks resolve within the demuxer cache configured above.
     setProp('force-seekable', 'yes');
-    // Auto-rebuffer to keep the stream alive: on cache underrun, pause and
-    // refill a real cushion instead of resuming immediately and stuttering
-    // again. Initial buffering smooths the first seconds too.
+    // Auto-rebuffer to keep the stream alive: on cache underrun, pause
+    // until a 10 second cushion is banked instead of resuming the moment a
+    // frame is available and stuttering again seconds later. IPTV servers
+    // usually burst faster than realtime when a client is behind, so the
+    // pause is shorter than 10s of wall time and playback continues from
+    // the cushion ("buffers in the background") afterwards. Applies to the
+    // initial join too, trading a slightly slower channel start for stable
+    // playback from the first second.
     setProp('cache-pause', 'yes');
     setProp('cache-pause-initial', 'yes');
-    setProp('cache-pause-wait', '4');
+    setProp('cache-pause-wait', '10');
   }
 
   @override

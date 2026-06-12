@@ -130,8 +130,17 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   /// its own reconnect loop from starting.
   /// [_reconnectSawError] is set by the error listener during a cycle so the
   /// loop knows a reopen attempt failed without relying on state writes.
+  /// [_lastDropErrorAt] timestamps the most recent drop-class error so the
+  /// passive phase can tell a healed connection from one still erroring.
   Player? _reconnectPlayer;
   bool _reconnectSawError = false;
+  DateTime? _lastDropErrorAt;
+
+  /// True only when the user deliberately paused via [togglePlayPause].
+  /// mpv pauses by itself while refilling an empty cache (paused-for-cache),
+  /// and the reconnect loop must keep recovering through those, so player
+  /// state alone cannot distinguish the two.
+  bool _userPaused = false;
   static const int _maxReconnectAttempts = 5;
 
   PlayerNotifier(this._ref) : super(const PlayerState()) {
@@ -146,6 +155,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     // Claim a new generation; any in-flight playChannel becomes stale.
     final generation = ++_playGeneration;
     _lastRequestedChannelId = channelId;
+    _userPaused = false;
 
     // Remember the currently-playing channel so the user can jump back with
     // the last-channel toggle. We capture it BEFORE stop() clears state.
@@ -236,8 +246,9 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
           lowerError.contains('stream disconnected') ||
           lowerError.contains('ffurl_read') ||
           lowerError.contains('connection reset')) {
-        AppLogger.info('Auto-reconnecting after stream drop: $error');
+        AppLogger.info('Stream drop detected, monitoring for recovery: $error');
         _reconnectSawError = true;
+        _lastDropErrorAt = DateTime.now();
         _tryReconnect();
         return;
       }
@@ -250,6 +261,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       // suppressed.
       if (identical(_reconnectPlayer, player)) {
         _reconnectSawError = true;
+        _lastDropErrorAt = DateTime.now();
         return;
       }
 
@@ -332,7 +344,13 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
   /// Toggle play/pause
   void togglePlayPause() {
-    state.player?.playOrPause();
+    final player = state.player;
+    if (player == null) return;
+    // Record the user's intent BEFORE toggling: the reconnect loop must not
+    // confuse a deliberate pause with mpv's own paused-for-cache state.
+    // Toggling while playing means the user is pausing.
+    _userPaused = player.state.playing;
+    player.playOrPause();
   }
 
   /// Stop and dispose player
@@ -573,13 +591,21 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     });
   }
 
-  /// Silent reconnect loop: re-open the current channel's URL without tearing
-  /// the player down. Used when the stream drifts past its live window or the
-  /// server drops the connection. Runs as a self-driving retry loop because a
-  /// reopen attempted while the network is still down fails into mpv's idle
-  /// state, which emits no further error events to re-trigger us. Exponential
-  /// backoff (1s, 2s, 4s, 8s, 16s), single-instance, and bails the moment the
-  /// user zaps to another channel.
+  /// Stream-drop recovery in two phases, both careful never to hold two
+  /// provider connections at once (IPTV plans count concurrent streams, and
+  /// a reopen racing the old session trips the max-connections limit).
+  ///
+  /// Phase 1 is passive: FFmpeg's own reconnect plus the large demuxer cache
+  /// recover most drops on the existing connection while the user keeps
+  /// watching buffered content, so nothing is reopened until playback has
+  /// genuinely stalled for several consecutive seconds.
+  ///
+  /// Phase 2 actively reopens, but stops the current stream FIRST so the
+  /// provider releases its slot before the replacement connection opens.
+  /// It runs as a self-driving retry loop because a reopen attempted while
+  /// the network is still down fails into mpv's idle state, which emits no
+  /// further error events to re-trigger us. Exponential backoff, single
+  /// instance per player, and bails the moment the user zaps away.
   Future<void> _tryReconnect() async {
     final channel = state.channel;
     final player = state.player;
@@ -592,8 +618,49 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
     _reconnectPlayer = player;
     try {
+      // Phase 1: watch the existing connection. Exit early if the stream
+      // heals itself (no drop errors for a while and playback running);
+      // escalate to a reopen only after a sustained stall, i.e. the cache
+      // ran dry and is not refilling.
+      // The stall threshold must exceed cache-pause-wait (4s in
+      // _applyMpvIptvTuning) or a healthy rebuffer pause would alias into
+      // an unnecessary reopen.
+      var stalledSeconds = 0;
+      for (var i = 0; i < 150 && stalledSeconds < 8; i++) {
+        await Future<void>.delayed(const Duration(seconds: 1));
+        if (!mounted || !identical(state.player, player)) return;
+        if (_userPaused) {
+          // A deliberate pause; leave the stream alone.
+          AppLogger.info('Reconnect: user paused, leaving stream as is');
+          return;
+        }
+        if (state.isPlaying && !state.isBuffering) {
+          stalledSeconds = 0;
+          final lastError = _lastDropErrorAt;
+          if (lastError != null &&
+              DateTime.now().difference(lastError) > const Duration(seconds: 10)) {
+            AppLogger.info('Stream recovered on the existing connection, no reopen needed');
+            return;
+          }
+        } else {
+          // Not playing cleanly: either buffering or mpv's paused-for-cache
+          // stall on a dead connection. Both count toward escalation.
+          stalledSeconds++;
+        }
+      }
+      if (!mounted || !identical(state.player, player)) return;
+      AppLogger.info('Stream stalled after drop, reopening connection');
+
       for (var attempt = 1; attempt <= _maxReconnectAttempts; attempt++) {
-        await Future<void>.delayed(Duration(seconds: 1 << (attempt - 1)));
+        // Release the provider's connection slot BEFORE the backoff wait,
+        // so the pause doubles as the server-side grace period and the new
+        // connection never overlaps the old one.
+        try {
+          await player.stop();
+        } catch (e) {
+          AppLogger.warning('Reconnect stop() failed: $e');
+        }
+        await Future<void>.delayed(Duration(seconds: 1 << attempt));
         // The user may have zapped or stopped during the backoff.
         if (!mounted || !identical(state.player, player)) return;
 
@@ -623,11 +690,10 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
             return;
           }
         }
-        // Quiet, idle, and not buffering after the watch window means the
-        // user paused during recovery; leave the stream alone rather than
-        // force another reopen that would yank it back into playback.
-        if (!_reconnectSawError && !state.isPlaying && !state.isBuffering) {
-          AppLogger.info('Reconnect: playback paused during recovery, leaving stream as is');
+        // A deliberate pause during recovery: leave the stream alone rather
+        // than force another reopen that would yank it back into playback.
+        if (_userPaused) {
+          AppLogger.info('Reconnect: user paused during recovery, leaving stream as is');
           return;
         }
         AppLogger.warning('Reconnect attempt $attempt/$_maxReconnectAttempts did not recover');
@@ -673,8 +739,12 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     setProp('demuxer-max-back-bytes', '67108864'); // 64 MiB behind playhead
     setProp('demuxer-readahead-secs', '120');
     setProp('network-timeout', '10');
-    // FFmpeg HTTP reconnect on dropout — critical for IPTV.
-    setProp('stream-lavf-o', 'reconnect=1,reconnect_streamed=1,reconnect_delay_max=5');
+    // FFmpeg HTTP reconnect on dropout — critical for IPTV. reconnect=1
+    // covers read errors/premature EOF only; reconnect_on_network_error
+    // adds TCP/TLS connect failures. HTTP 4xx/5xx stay fatal on purpose:
+    // provider connection-limit responses must fall through to the app's
+    // reconnect loop, which releases the slot before opening a new one.
+    setProp('stream-lavf-o', 'reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_delay_max=5');
     // Many live TS streams report themselves as unseekable; mpv then errors
     // ("you can force it with --force-seekable=yes") instead of playing.
     // Seeks resolve within the demuxer cache configured above.

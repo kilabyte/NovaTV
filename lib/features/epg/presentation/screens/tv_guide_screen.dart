@@ -185,6 +185,22 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       if (kDebugMode) {
         debugPrint('EPG: TV Guide - grouping done: ${result.length} channels with programs');
       }
+      // Nudge the linked horizontal viewports once the new dataset lands.
+      // When grouping resolves while the guide is on screen, the header and
+      // program-row lists can skip rebuilding their children at the current
+      // offset and stay blank until the user drags; a one-pixel jump forces
+      // every linked list to re-layout at its existing position.
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_timeHeaderController.hasClients) return;
+          final pos = _timeHeaderController.position;
+          final nudge = (pos.pixels > 0 ? pos.pixels - 1 : 1.0).clamp(0.0, pos.maxScrollExtent);
+          _timeHeaderController.jumpTo(nudge);
+          // The jump cancels any in-flight scroll-to-now animation, so
+          // re-issue it; fresh guide data should land looking at "now".
+          _scrollToCurrentTime();
+        });
+      }
       return result;
     } catch (e) {
       if (kDebugMode) {
@@ -222,7 +238,18 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       final offset = rawOffset - _hourWidth; // Shift view back by 1 hour
       if (_timeHeaderController.hasClients) {
         final maxOffset = (_totalHours * _hourWidth) - 400.0;
+        if (kDebugMode) {
+          final pos = _timeHeaderController.position;
+          debugPrint('EPG: scrollToNow target=${offset.clamp(0.0, maxOffset)} pixels=${pos.pixels} maxScrollExtent=${pos.maxScrollExtent} viewport=${pos.viewportDimension}');
+        }
         _timeHeaderController.animateTo(offset.clamp(0.0, maxOffset), duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+        if (kDebugMode) {
+          Future<void>.delayed(const Duration(seconds: 1), () {
+            if (!mounted || !_timeHeaderController.hasClients) return;
+            final pos = _timeHeaderController.position;
+            debugPrint('EPG: scrollToNow +1s pixels=${pos.pixels} maxScrollExtent=${pos.maxScrollExtent}');
+          });
+        }
       }
     }
   }

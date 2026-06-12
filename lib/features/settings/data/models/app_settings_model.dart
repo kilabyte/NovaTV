@@ -59,6 +59,10 @@ class AppSettingsModel extends HiveObject {
   @HiveField(16)
   final bool playerMuted;
 
+  /// Whether the desktop sidebar is collapsed to the icon-only rail.
+  @HiveField(17)
+  final bool sidebarCollapsed;
+
   AppSettingsModel({
     this.themeMode = 'dark',
     this.autoRefreshPlaylists = false,
@@ -77,6 +81,7 @@ class AppSettingsModel extends HiveObject {
     this.groupsSectionExpanded = true,
     this.playerVolume = 1.0,
     this.playerMuted = false,
+    this.sidebarCollapsed = false,
   });
 
   AppSettingsModel copyWith({
@@ -98,6 +103,7 @@ class AppSettingsModel extends HiveObject {
     bool? groupsSectionExpanded,
     double? playerVolume,
     bool? playerMuted,
+    bool? sidebarCollapsed,
   }) {
     return AppSettingsModel(
       themeMode: themeMode ?? this.themeMode,
@@ -117,6 +123,7 @@ class AppSettingsModel extends HiveObject {
       groupsSectionExpanded: groupsSectionExpanded ?? this.groupsSectionExpanded,
       playerVolume: playerVolume ?? this.playerVolume,
       playerMuted: playerMuted ?? this.playerMuted,
+      sidebarCollapsed: sidebarCollapsed ?? this.sidebarCollapsed,
     );
   }
 }

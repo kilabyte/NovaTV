@@ -164,15 +164,20 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          Row(
-            children: [
-              // Sidebar
-              _DesktopSidebar(selectedIndex: selectedIndex, onItemTapped: (index) => _onItemTapped(context, index)),
-              // Divider
-              Container(width: 1, color: AppColors.border),
-              // Main content
-              Expanded(child: widget.child),
-            ],
+          // Top inset matters on Android tablets/TV boxes where this layout
+          // runs under a status bar; on desktop the insets are zero.
+          SafeArea(
+            bottom: false,
+            child: Row(
+              children: [
+                // Sidebar
+                _DesktopSidebar(selectedIndex: selectedIndex, onItemTapped: (index) => _onItemTapped(context, index)),
+                // Divider
+                Container(width: 1, color: AppColors.border),
+                // Main content
+                Expanded(child: widget.child),
+              ],
+            ),
           ),
           // Mini-player overlay
           const MiniPlayer(),
@@ -196,14 +201,40 @@ class _DesktopSidebar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Container(
-      width: 220,
+    final collapsed = ref.watch(appSettingsProvider.select((s) => s.sidebarCollapsed));
+
+    final targetWidth = collapsed ? 64.0 : 220.0;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+      width: targetWidth,
       color: AppColors.sidebar,
+      // Lay the content out at its TARGET width and clip while the container
+      // width animates; laying expanded rows out at intermediate widths
+      // (64..220) overflows them on every expand.
+      child: ClipRect(
+        child: OverflowBox(
+          alignment: Alignment.topLeft,
+          minWidth: targetWidth,
+          maxWidth: targetWidth,
+          child: _sidebarContent(context, ref, collapsed),
+        ),
+      ),
+    );
+  }
+
+  Widget _sidebarContent(BuildContext context, WidgetRef ref, bool collapsed) {
+    return SizedBox(
+      width: collapsed ? 64 : 220,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // App header
-          _SidebarHeader(),
+          _SidebarHeader(
+            collapsed: collapsed,
+            onToggle: () => ref.read(appSettingsProvider.notifier).setSidebarCollapsed(!collapsed),
+          ),
 
           const SizedBox(height: 8),
 
@@ -213,44 +244,49 @@ class _DesktopSidebar extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8),
               children: [
                 // TV Guide - prominent position at top
-                _SidebarItemLarge(icon: Icons.calendar_month_rounded, label: 'TV Guide', isSelected: selectedIndex == 1, onTap: () => onItemTapped(1)),
+                _SidebarItemLarge(icon: Icons.calendar_month_rounded, label: 'TV Guide', isSelected: selectedIndex == 1, collapsed: collapsed, onTap: () => onItemTapped(1)),
 
                 const SizedBox(height: 4),
 
                 // Primary items
-                _SidebarItem(icon: Icons.star_rounded, label: 'Favorites', isSelected: selectedIndex == 2, onTap: () => onItemTapped(2)),
+                _SidebarItem(icon: Icons.star_rounded, label: 'Favorites', isSelected: selectedIndex == 2, collapsed: collapsed, onTap: () => onItemTapped(2)),
 
-                // Recently Watched section
-                _RecentlyWatchedSection(),
+                // Sub-lists need labels to mean anything; the rail keeps just
+                // the primary destinations.
+                if (!collapsed) ...[
+                  // Recently Watched section
+                  _RecentlyWatchedSection(),
 
-                // Divider
-                _SidebarDivider(),
+                  // Divider
+                  _SidebarDivider(),
 
-                // Groups section (collapsible)
-                _GroupsSection(
-                  onGroupTap: (group) {
-                    ref.read(selectedGroupProvider.notifier).state = group;
-                    onItemTapped(0);
-                  },
-                ),
+                  // Groups section (collapsible)
+                  _GroupsSection(
+                    onGroupTap: (group) {
+                      ref.read(selectedGroupProvider.notifier).state = group;
+                      onItemTapped(0);
+                    },
+                  ),
 
-                // Divider
-                _SidebarDivider(),
+                  // Divider
+                  _SidebarDivider(),
+                ],
 
                 // Secondary items
-                _SidebarItem(icon: Icons.search_rounded, label: 'Search', isSelected: selectedIndex == 5, onTap: () => onItemTapped(5)),
-                _SidebarItem(icon: Icons.playlist_add_rounded, label: 'Playlists', isSelected: selectedIndex == 3, onTap: () => onItemTapped(3)),
+                _SidebarItem(icon: Icons.search_rounded, label: 'Search', isSelected: selectedIndex == 5, collapsed: collapsed, onTap: () => onItemTapped(5)),
+                _SidebarItem(icon: Icons.playlist_add_rounded, label: 'Playlists', isSelected: selectedIndex == 3, collapsed: collapsed, onTap: () => onItemTapped(3)),
               ],
             ),
           ),
 
           // Settings at bottom
           Container(
+            width: double.infinity,
             decoration: BoxDecoration(
               border: Border(top: BorderSide(color: AppColors.border)),
             ),
             padding: const EdgeInsets.all(8),
-            child: _SidebarItem(icon: Icons.settings_rounded, label: 'Settings', isSelected: selectedIndex == 4, onTap: () => onItemTapped(4)),
+            child: _SidebarItem(icon: Icons.settings_rounded, label: 'Settings', isSelected: selectedIndex == 4, collapsed: collapsed, onTap: () => onItemTapped(4)),
           ),
         ],
       ),
@@ -259,11 +295,38 @@ class _DesktopSidebar extends ConsumerWidget {
 }
 
 class _SidebarHeader extends StatelessWidget {
+  final bool collapsed;
+  final VoidCallback onToggle;
+
+  const _SidebarHeader({required this.collapsed, required this.onToggle});
+
   @override
   Widget build(BuildContext context) {
+    if (collapsed) {
+      // Rail mode: the logo doubles as the expand control.
+      return SizedBox(
+        height: 56,
+        child: Center(
+          child: Tooltip(
+            message: 'Expand sidebar',
+            child: InkWell(
+              onTap: onToggle,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.live_tv_rounded, color: Colors.white, size: 18),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Container(
       height: 56,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.only(left: 16, right: 8),
       child: Row(
         children: [
           // Simple icon
@@ -274,9 +337,23 @@ class _SidebarHeader extends StatelessWidget {
             child: const Icon(Icons.live_tv_rounded, color: Colors.white, size: 18),
           ),
           const SizedBox(width: 12),
-          const Text(
-            'Nova IPTV',
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600, letterSpacing: -0.3),
+          const Expanded(
+            child: Text(
+              'Nova IPTV',
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600, letterSpacing: -0.3),
+              overflow: TextOverflow.clip,
+              softWrap: false,
+            ),
+          ),
+          Tooltip(
+            message: 'Collapse sidebar',
+            child: IconButton(
+              onPressed: onToggle,
+              icon: const Icon(Icons.keyboard_double_arrow_left_rounded, size: 18),
+              color: AppColors.textMuted,
+              splashRadius: 18,
+              visualDensity: VisualDensity.compact,
+            ),
           ),
         ],
       ),
@@ -560,9 +637,10 @@ class _SidebarItem extends StatefulWidget {
   final IconData icon;
   final String label;
   final bool isSelected;
+  final bool collapsed;
   final VoidCallback onTap;
 
-  const _SidebarItem({required this.icon, required this.label, required this.isSelected, required this.onTap});
+  const _SidebarItem({required this.icon, required this.label, required this.isSelected, this.collapsed = false, required this.onTap});
 
   @override
   State<_SidebarItem> createState() => _SidebarItemState();
@@ -574,8 +652,13 @@ class _SidebarItemState extends State<_SidebarItem> {
   @override
   Widget build(BuildContext context) {
     final isHighlighted = _isHovered || widget.isSelected;
+    final iconColor = widget.isSelected
+        ? AppColors.primary
+        : isHighlighted
+        ? AppColors.textPrimary
+        : AppColors.textSecondary;
 
-    return TvFocusable(
+    final item = TvFocusable(
       onTap: widget.onTap,
       child: MouseRegion(
         onEnter: (_) => setState(() => _isHovered = true),
@@ -583,7 +666,7 @@ class _SidebarItemState extends State<_SidebarItem> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 100),
           margin: const EdgeInsets.only(bottom: 2),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: widget.collapsed ? 0 : 12, vertical: 8),
           decoration: BoxDecoration(
             color: widget.isSelected
                 ? AppColors.sidebarSelectedBg
@@ -592,38 +675,34 @@ class _SidebarItemState extends State<_SidebarItem> {
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Row(
-            children: [
-              Icon(
-                widget.icon,
-                color: widget.isSelected
-                    ? AppColors.primary
-                    : isHighlighted
-                    ? AppColors.textPrimary
-                    : AppColors.textSecondary,
-                size: 20,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  widget.label,
-                  style: TextStyle(
-                    color: widget.isSelected
-                        ? AppColors.textPrimary
-                        : isHighlighted
-                        ? AppColors.textPrimary
-                        : AppColors.textSecondary,
-                    fontSize: 14,
-                    fontWeight: widget.isSelected ? FontWeight.w500 : FontWeight.w400,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+          child: widget.collapsed
+              ? Center(child: Icon(widget.icon, color: iconColor, size: 20))
+              : Row(
+                  children: [
+                    Icon(widget.icon, color: iconColor, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        widget.label,
+                        style: TextStyle(
+                          color: widget.isSelected
+                              ? AppColors.textPrimary
+                              : isHighlighted
+                              ? AppColors.textPrimary
+                              : AppColors.textSecondary,
+                          fontSize: 14,
+                          fontWeight: widget.isSelected ? FontWeight.w500 : FontWeight.w400,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );
+
+    return widget.collapsed ? Tooltip(message: widget.label, child: item) : item;
   }
 }
 
@@ -632,9 +711,10 @@ class _SidebarItemLarge extends StatefulWidget {
   final IconData icon;
   final String label;
   final bool isSelected;
+  final bool collapsed;
   final VoidCallback onTap;
 
-  const _SidebarItemLarge({required this.icon, required this.label, required this.isSelected, required this.onTap});
+  const _SidebarItemLarge({required this.icon, required this.label, required this.isSelected, this.collapsed = false, required this.onTap});
 
   @override
   State<_SidebarItemLarge> createState() => _SidebarItemLargeState();
@@ -646,6 +726,43 @@ class _SidebarItemLargeState extends State<_SidebarItemLarge> {
   @override
   Widget build(BuildContext context) {
     final isHighlighted = _isHovered || widget.isSelected;
+
+    if (widget.collapsed) {
+      return Tooltip(
+        message: widget.label,
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _isHovered = true),
+          onExit: (_) => setState(() => _isHovered = false),
+          child: GestureDetector(
+            onTap: widget.onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 100),
+              margin: const EdgeInsets.only(bottom: 2),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: widget.isSelected
+                    ? AppColors.sidebarSelectedBg
+                    : _isHovered
+                    ? AppColors.surfaceHover
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Center(
+                child: Icon(
+                  widget.icon,
+                  color: widget.isSelected
+                      ? AppColors.primary
+                      : isHighlighted
+                      ? AppColors.textPrimary
+                      : AppColors.textSecondary,
+                  size: 24,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),

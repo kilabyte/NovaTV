@@ -54,6 +54,5 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Claude AI
-.claude/
-CLAUDE.md
+# Claude AI: commands and CLAUDE.md are shared; local settings stay private
+.claude/settings.local.json

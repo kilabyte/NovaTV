@@ -144,6 +144,12 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsModel> {
     _saveSettings();
   }
 
+  void setSidebarCollapsed(bool collapsed) {
+    if (state.sidebarCollapsed == collapsed) return;
+    state = state.copyWith(sidebarCollapsed: collapsed);
+    _saveSettings();
+  }
+
   void setPlayerVolume(double volume) {
     final clamped = volume.clamp(0.0, 1.0);
     if (state.playerVolume == clamped) return;

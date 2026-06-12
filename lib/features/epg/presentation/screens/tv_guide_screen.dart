@@ -458,7 +458,10 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     });
 
     return SizedBox(
-      height: 44,
+      // 48 leaves real slack for the chips (36px content + border); at 44
+      // they fit with zero margin and Android's font metrics clipped the
+      // bottom edge.
+      height: 48,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),

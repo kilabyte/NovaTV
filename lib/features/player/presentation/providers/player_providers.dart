@@ -218,6 +218,11 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
           lowerError.contains('avi:') ||
           lowerError.contains('avformat') ||
           lowerError.contains('seek failed') ||
+          // Live TS streams often refuse seeks ("...force it with
+          // --force-seekable=yes") while playback continues fine behind the
+          // panel, so seekability complaints are never treated as fatal.
+          lowerError.contains('seekable') ||
+          lowerError.contains('cannot seek') ||
           lowerError.contains('discarding frame') ||
           lowerError.contains('corrupted') && !lowerError.contains('file')) {
         return;
@@ -616,6 +621,16 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     setProp('network-timeout', '10');
     // FFmpeg HTTP reconnect on dropout — critical for IPTV.
     setProp('stream-lavf-o', 'reconnect=1,reconnect_streamed=1,reconnect_delay_max=5');
+    // Many live TS streams report themselves as unseekable; mpv then errors
+    // ("you can force it with --force-seekable=yes") instead of playing.
+    // Seeks resolve within the demuxer cache configured above.
+    setProp('force-seekable', 'yes');
+    // Auto-rebuffer to keep the stream alive: on cache underrun, pause and
+    // refill for a couple of seconds instead of stuttering until the
+    // connection dies. Initial buffering smooths the first seconds too.
+    setProp('cache-pause', 'yes');
+    setProp('cache-pause-initial', 'yes');
+    setProp('cache-pause-wait', '2');
   }
 
   @override

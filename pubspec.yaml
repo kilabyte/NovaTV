@@ -1,7 +1,7 @@
 name: novaiptv
 description: "Nova IPTV - A modern cross-platform IPTV player with M3U and EPG support"
 publish_to: 'none'
-version: 1.0.17+16
+version: 1.0.18+17
 
 environment:
   sdk: ^3.9.2

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -123,11 +122,16 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   /// recorded up front so [retry] still works when the lookup itself failed.
   String? _lastRequestedChannelId;
 
-  /// Auto-reconnect bookkeeping: reentrancy flag and attempt counter so a
-  /// stream stuck in an error loop doesn't hammer the server with
-  /// overlapping open() calls.
-  bool _reconnectInFlight = false;
-  int _reconnectAttempts = 0;
+  /// Auto-reconnect bookkeeping. [_reconnectPlayer] is the player instance
+  /// the retry loop currently owns: it makes the loop single-instance per
+  /// player (drop-class errors can arrive faster than open() completes) and
+  /// scopes error-panel suppression to that player, so zapping to a new
+  /// channel mid-loop neither swallows the new channel's errors nor blocks
+  /// its own reconnect loop from starting.
+  /// [_reconnectSawError] is set by the error listener during a cycle so the
+  /// loop knows a reopen attempt failed without relying on state writes.
+  Player? _reconnectPlayer;
+  bool _reconnectSawError = false;
   static const int _maxReconnectAttempts = 5;
 
   PlayerNotifier(this._ref) : super(const PlayerState()) {
@@ -142,7 +146,6 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     // Claim a new generation; any in-flight playChannel becomes stale.
     final generation = ++_playGeneration;
     _lastRequestedChannelId = channelId;
-    _reconnectAttempts = 0;
 
     // Remember the currently-playing channel so the user can jump back with
     // the last-channel toggle. We capture it BEFORE stop() clears state.
@@ -156,17 +159,13 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     // Track as recently watched
     _ref.read(recentlyWatchedNotifierProvider.notifier).addChannel(channelId);
 
-    // Create new player
-    // Note: Buffering is handled by media_kit with platform-specific backends:
-    // - Desktop (macOS/Windows/Linux): Uses mpv/libmpv
-    // - Android: Uses ExoPlayer
-    // - iOS: Uses AVPlayer
+    // Create new player. media_kit drives libmpv on all native platforms
+    // (desktop, Android, and iOS alike).
     final player = Player();
     final controller = VideoController(player);
 
-    // IPTV-friendly tuning for the libmpv desktop backend. mpv options don't
-    // exist on Android/iOS so we guard behind a platform check; errors from
-    // setProperty are fatal on those platforms.
+    // IPTV-friendly tuning: FFmpeg reconnect-on-dropout, demuxer cache, and
+    // auto-rebuffer. Applies to every libmpv-backed platform.
     _applyMpvIptvTuning(player);
 
     state = state.copyWith(
@@ -195,7 +194,6 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         // transient errors by itself, and the error panel would otherwise
         // hide live video forever.
         state = state.copyWith(isPlaying: playing, clearError: playing);
-        if (playing) _reconnectAttempts = 0;
       }
     }));
 
@@ -229,12 +227,29 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       }
 
       // Auto-reconnect on live-window drift (common after sleep/wake on HLS
-      // streams). Instead of surfacing an error, silently reopen the stream.
+      // streams) and on connection-level read failures ("tcp: ffurl_read
+      // returned 0xffffff92" timeouts, resets): IPTV servers drop long-lived
+      // connections routinely and a reopen almost always succeeds, so try
+      // that before surfacing an error panel.
       if (lowerError.contains('behind live window') ||
           lowerError.contains('live window') ||
-          lowerError.contains('stream disconnected')) {
-        AppLogger.info('Auto-reconnecting after live-window drift');
+          lowerError.contains('stream disconnected') ||
+          lowerError.contains('ffurl_read') ||
+          lowerError.contains('connection reset')) {
+        AppLogger.info('Auto-reconnecting after stream drop: $error');
+        _reconnectSawError = true;
         _tryReconnect();
+        return;
+      }
+
+      // While the reconnect loop is active for THIS player, every other error
+      // (typically the "failed to open" from a reopen attempted while the
+      // network is still down) is feedback for the loop, not something to
+      // panel the user with. The loop surfaces a single readable message if
+      // it gives up. Errors from a different player (after a zap) are not
+      // suppressed.
+      if (identical(_reconnectPlayer, player)) {
+        _reconnectSawError = true;
         return;
       }
 
@@ -558,55 +573,87 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     });
   }
 
-  /// Silent reconnect: re-open the current channel's URL without tearing the
-  /// player down. Used when the stream drifts past its live window or the
-  /// server briefly drops the connection. Guarded against reentrancy (error
-  /// events can arrive faster than open() completes), capped, and backed off
-  /// exponentially so a dead server isn't hammered.
+  /// Silent reconnect loop: re-open the current channel's URL without tearing
+  /// the player down. Used when the stream drifts past its live window or the
+  /// server drops the connection. Runs as a self-driving retry loop because a
+  /// reopen attempted while the network is still down fails into mpv's idle
+  /// state, which emits no further error events to re-trigger us. Exponential
+  /// backoff (1s, 2s, 4s, 8s, 16s), single-instance, and bails the moment the
+  /// user zaps to another channel.
   Future<void> _tryReconnect() async {
-    if (_reconnectInFlight) return;
     final channel = state.channel;
     final player = state.player;
     if (channel == null || player == null) return;
+    // Single-instance per player. A loop still draining for a PREVIOUS
+    // player (it exits at its next identity check) must not block the
+    // current player's reconnect, so only bail when the running loop
+    // already owns this player.
+    if (identical(_reconnectPlayer, player)) return;
 
-    if (_reconnectAttempts >= _maxReconnectAttempts) {
+    _reconnectPlayer = player;
+    try {
+      for (var attempt = 1; attempt <= _maxReconnectAttempts; attempt++) {
+        await Future<void>.delayed(Duration(seconds: 1 << (attempt - 1)));
+        // The user may have zapped or stopped during the backoff.
+        if (!mounted || !identical(state.player, player)) return;
+
+        _reconnectSawError = false;
+        try {
+          final httpHeaders = <String, String>{};
+          if (channel.userAgent != null) httpHeaders['User-Agent'] = channel.userAgent!;
+          if (channel.referrer != null) httpHeaders['Referer'] = channel.referrer!;
+          if (channel.headers != null) httpHeaders.addAll(channel.headers!);
+          // Go through the MIME fallback chain so channels that only play via
+          // the cached .m3u8/.mpd variant reconnect with the right URL.
+          await _openWithMimeFallback(player, channel.url, httpHeaders);
+        } catch (e) {
+          AppLogger.warning('Reconnect open() failed (attempt $attempt/$_maxReconnectAttempts): $e');
+          continue;
+        }
+
+        // open() completing only means the command was accepted; failure
+        // arrives as an async error event (recorded in _reconnectSawError by
+        // the listener). Watch for a few seconds to see which way it went.
+        for (var i = 0; i < 8; i++) {
+          await Future<void>.delayed(const Duration(seconds: 1));
+          if (!mounted || !identical(state.player, player)) return;
+          if (_reconnectSawError) break;
+          if (i >= 2 && state.isPlaying && !state.isBuffering) {
+            AppLogger.info('Reconnect succeeded (attempt $attempt/$_maxReconnectAttempts)');
+            return;
+          }
+        }
+        // Quiet, idle, and not buffering after the watch window means the
+        // user paused during recovery; leave the stream alone rather than
+        // force another reopen that would yank it back into playback.
+        if (!_reconnectSawError && !state.isPlaying && !state.isBuffering) {
+          AppLogger.info('Reconnect: playback paused during recovery, leaving stream as is');
+          return;
+        }
+        AppLogger.warning('Reconnect attempt $attempt/$_maxReconnectAttempts did not recover');
+      }
+
       // Out of attempts: surface the failure so the UI offers Retry instead
       // of leaving a silently frozen stream.
-      state = state.copyWith(errorMessage: 'Stream disconnected: automatic reconnect failed');
-      return;
-    }
-
-    _reconnectInFlight = true;
-    _reconnectAttempts++;
-    try {
-      // Exponential backoff: 1s, 2s, 4s, 8s, 16s.
-      await Future<void>.delayed(Duration(seconds: 1 << (_reconnectAttempts - 1)));
-      // The user may have zapped or stopped during the backoff.
-      if (!mounted || !identical(state.player, player)) return;
-
-      final httpHeaders = <String, String>{};
-      if (channel.userAgent != null) httpHeaders['User-Agent'] = channel.userAgent!;
-      if (channel.referrer != null) httpHeaders['Referer'] = channel.referrer!;
-      if (channel.headers != null) httpHeaders.addAll(channel.headers!);
-      // Go through the MIME fallback chain so channels that only play via
-      // the cached .m3u8/.mpd variant reconnect with the right URL.
-      await _openWithMimeFallback(player, channel.url, httpHeaders);
-    } catch (e) {
-      AppLogger.warning('Silent reconnect failed (attempt $_reconnectAttempts/$_maxReconnectAttempts): $e');
-      if (mounted && identical(state.player, player) && _reconnectAttempts >= _maxReconnectAttempts) {
+      if (mounted && identical(state.player, player)) {
         state = state.copyWith(errorMessage: 'Stream disconnected: automatic reconnect failed');
       }
     } finally {
-      _reconnectInFlight = false;
+      // Only release ownership if a newer loop has not claimed it; a loop
+      // exiting late for a replaced player must not stomp the active one.
+      if (identical(_reconnectPlayer, player)) {
+        _reconnectPlayer = null;
+      }
     }
   }
 
-  /// Apply IPTV-friendly mpv options. mpv-only; silently skipped on
-  /// Android/iOS/web. These settings cut buffering stalls and let FFmpeg
-  /// automatically reconnect if the server drops the connection.
+  /// Apply IPTV-friendly mpv options. media_kit's NativePlayer is libmpv on
+  /// every native platform, Android and iOS included, so this runs everywhere
+  /// except web. Without it a silent connection drop stalls playback forever
+  /// (frozen frame, no error event); these settings cut buffering stalls and
+  /// let FFmpeg automatically reconnect when the server drops the connection.
   void _applyMpvIptvTuning(Player player) {
     if (kIsWeb) return;
-    if (!(Platform.isMacOS || Platform.isWindows || Platform.isLinux)) return;
     final platform = player.platform;
     if (platform is! NativePlayer) return;
     void setProp(String name, String value) {

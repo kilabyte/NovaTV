@@ -11,9 +11,11 @@ import 'config/router/routes.dart';
 import 'config/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
 import 'core/services/now_playing_service.dart';
+import 'core/services/pip_service.dart';
 import 'core/services/platform_info.dart';
 import 'core/storage/index_service.dart';
 import 'core/utils/app_logger.dart';
+import 'features/player/presentation/widgets/system_pip_overlay.dart';
 import 'features/settings/presentation/providers/settings_providers.dart';
 import 'shared/widgets/startup_refresh.dart';
 
@@ -45,6 +47,13 @@ class _NovaAppState extends ConsumerState<NovaApp> with WidgetsBindingObserver {
       // Start the Now Playing / media-keys bridge. It listens for player
       // state changes and forwards them to MPNowPlayingInfoCenter.
       ref.read(nowPlayingServiceProvider);
+    }
+
+    // Start the system picture-in-picture bridge. It pushes playback
+    // eligibility to MainActivity so swiping home while a channel plays
+    // hands the video off to the OS PiP window.
+    if (!kIsWeb && Platform.isAndroid) {
+      ref.read(pipServiceProvider);
     }
   }
 
@@ -128,7 +137,15 @@ class _NovaAppState extends ConsumerState<NovaApp> with WidgetsBindingObserver {
                 : TextScaler.linear(mq.textScaler.scale(1.0).clamp(0.8, 1.2));
             return MediaQuery(
               data: mq.copyWith(textScaler: scaler),
-              child: child ?? const SizedBox.shrink(),
+              child: Stack(
+                children: [
+                  child ?? const SizedBox.shrink(),
+                  // While the OS picture-in-picture window is active the
+                  // whole activity is rendered tiny, so cover everything
+                  // with bare video.
+                  const SystemPipOverlay(),
+                ],
+              ),
             );
           },
         );

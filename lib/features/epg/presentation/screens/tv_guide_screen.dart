@@ -170,16 +170,22 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     final args = GuideGroupArgs(programs: programs, channels: channels, startTime: startTime, endTime: endTime);
 
     try {
+      final Map<String, List<Program>> result;
       if (useCompute) {
-        return await compute(groupProgramsForGuide, args).timeout(
+        result = await compute(groupProgramsForGuide, args).timeout(
           const Duration(seconds: 30),
           onTimeout: () {
             throw TimeoutException('Program grouping timed out');
           },
         );
+      } else {
+        // Small dataset - process synchronously
+        result = groupProgramsForGuide(args);
       }
-      // Small dataset - process synchronously
-      return groupProgramsForGuide(args);
+      if (kDebugMode) {
+        debugPrint('EPG: TV Guide - grouping done: ${result.length} channels with programs');
+      }
+      return result;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('EPG: TV Guide - error processing: $e');

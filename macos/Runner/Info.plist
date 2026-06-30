@@ -54,5 +54,16 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<!--
+		Chromecast casting needs to discover Cast devices on the local
+		network via Bonjour (_googlecast._tcp). macOS prompts once using
+		this description string the first time discovery runs.
+	-->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Nova IPTV discovers Chromecast devices on your local network so you can cast channels to them.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_googlecast._tcp</string>
+	</array>
 </dict>
 </plist>

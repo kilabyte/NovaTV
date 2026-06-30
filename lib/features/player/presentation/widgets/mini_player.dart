@@ -9,6 +9,7 @@ import '../../../../config/theme/app_colors.dart';
 import '../../../epg/presentation/providers/epg_providers.dart';
 import '../../../playlist/domain/entities/channel.dart';
 import '../providers/player_providers.dart';
+import 'cast_device_picker.dart';
 
 /// Mini-player widget for PiP within the app - TiVimate style
 class MiniPlayer extends ConsumerStatefulWidget {
@@ -174,6 +175,13 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                               },
                               tooltip: playerState.isPlaying ? 'Pause' : 'Play',
                               isPrimary: true,
+                            ),
+                            const SizedBox(height: 4),
+                            // Cast to a Chromecast device
+                            _MiniPlayerButton(
+                              icon: Icons.cast_rounded,
+                              onTap: () => showCastPicker(context),
+                              tooltip: 'Cast',
                             ),
                             const SizedBox(height: 4),
                             // Mute / unmute

@@ -10,10 +10,23 @@ import '../../../../core/utils/app_logger.dart';
 import '../../../playlist/domain/entities/channel.dart';
 import '../../../playlist/presentation/providers/playlist_providers.dart' show playlistRepositoryProvider, recentlyWatchedNotifierProvider;
 import '../../../settings/presentation/providers/settings_providers.dart';
+import 'cast_providers.dart';
 
 /// Stream health indicator — aggregates recent buffering events into a
 /// green/yellow/red signal surfaced on the mini-player.
 enum StreamHealth { good, okay, poor }
+
+/// Builds the HTTP header map to send when fetching [channel]'s stream:
+/// User-Agent, Referer, plus any extra per-channel headers parsed from the
+/// playlist (`#EXTVLCOPT:http-*`). Shared so local playback, auto-reconnect,
+/// failure diagnosis, and Chromecast casting all send identical headers.
+Map<String, String> buildChannelStreamHeaders(Channel channel) {
+  final headers = <String, String>{};
+  if (channel.userAgent != null) headers['User-Agent'] = channel.userAgent!;
+  if (channel.referrer != null) headers['Referer'] = channel.referrer!;
+  if (channel.headers != null) headers.addAll(channel.headers!);
+  return headers;
+}
 
 /// Global player state for mini-player support
 class PlayerState {
@@ -152,6 +165,16 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
   /// Play a channel
   Future<void> playChannel(String channelId) async {
+    // If a Chromecast session is active, route channel changes to the cast
+    // device instead of opening a local mpv connection — IPTV plans count
+    // concurrent streams, so we must not hold a local connection while the
+    // Chromecast holds one too. The cast notifier resolves and loads the
+    // channel on the device.
+    if (_ref.read(castProvider).isCasting) {
+      await _ref.read(castProvider.notifier).castChannelById(channelId);
+      return;
+    }
+
     // Claim a new generation; any in-flight playChannel becomes stale.
     final generation = ++_playGeneration;
     _lastRequestedChannelId = channelId;
@@ -305,18 +328,8 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
           if (generation != _playGeneration) return;
           state = state.copyWith(channel: channel);
 
-          final httpHeaders = <String, String>{};
-          if (channel.userAgent != null) {
-            httpHeaders['User-Agent'] = channel.userAgent!;
-          }
-          if (channel.referrer != null) {
-            httpHeaders['Referer'] = channel.referrer!;
-          }
-          if (channel.headers != null) {
-            httpHeaders.addAll(channel.headers!);
-          }
-
-          await _openWithMimeFallback(player, channel.url, httpHeaders);
+          await _openWithMimeFallback(
+              player, channel.url, buildChannelStreamHeaders(channel));
         } catch (e) {
           // A superseded call's open() failing on its disposed player must
           // not write a bogus error onto the new channel's state.
@@ -510,10 +523,10 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     final channel = state.channel;
     if (channel == null) return;
 
-    final headers = <String, dynamic>{'Range': 'bytes=0-0'};
-    if (channel.userAgent != null) headers['User-Agent'] = channel.userAgent!;
-    if (channel.referrer != null) headers['Referer'] = channel.referrer!;
-    if (channel.headers != null) headers.addAll(channel.headers!);
+    final headers = <String, dynamic>{
+      'Range': 'bytes=0-0',
+      ...buildChannelStreamHeaders(channel),
+    };
 
     String? diagnosis;
     try {
@@ -666,13 +679,10 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
         _reconnectSawError = false;
         try {
-          final httpHeaders = <String, String>{};
-          if (channel.userAgent != null) httpHeaders['User-Agent'] = channel.userAgent!;
-          if (channel.referrer != null) httpHeaders['Referer'] = channel.referrer!;
-          if (channel.headers != null) httpHeaders.addAll(channel.headers!);
           // Go through the MIME fallback chain so channels that only play via
           // the cached .m3u8/.mpd variant reconnect with the right URL.
-          await _openWithMimeFallback(player, channel.url, httpHeaders);
+          await _openWithMimeFallback(
+              player, channel.url, buildChannelStreamHeaders(channel));
         } catch (e) {
           AppLogger.warning('Reconnect open() failed (attempt $attempt/$_maxReconnectAttempts): $e');
           continue;

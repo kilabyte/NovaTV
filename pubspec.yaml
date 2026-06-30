@@ -1,7 +1,7 @@
 name: novaiptv
 description: "Nova IPTV - A modern cross-platform IPTV player with M3U and EPG support"
 publish_to: 'none'
-version: 1.0.22+21
+version: 1.0.22+22
 
 environment:
   sdk: ^3.9.2
@@ -16,6 +16,13 @@ dependencies:
   media_kit: ^1.1.11
   media_kit_video: ^1.2.5
   media_kit_libs_video: ^1.0.5
+
+  # Chromecast / Google Cast (pure-Dart CastV2 — works on desktop + mobile).
+  # Vendored under third_party/dart_cast so we can patch ChromecastSession to
+  # load a ready-to-play URL directly (bypassing its playlist-rewriting proxy)
+  # for our on-device IPTV transmux. See third_party/dart_cast for the diff.
+  dart_cast:
+    path: third_party/dart_cast
 
   # State Management
   flutter_riverpod: ^2.5.1
@@ -51,6 +58,11 @@ dependencies:
 
   # Window management (macOS/Windows/Linux)
   window_manager: ^0.4.3
+
+  # Chromecast device discovery (native Bonjour) + FFI to the system resolver
+  # (getaddrinfo) for resolving `.local` mDNS hostnames, which Dart can't.
+  bonsoir: ^6.0.1
+  ffi: ^2.1.0
 
 dev_dependencies:
   flutter_test:

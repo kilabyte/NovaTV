@@ -6,5 +6,15 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!--
+		Chromecast casting: outbound TLS to the device on :8009 needs the
+		client entitlement; the built-in dart_cast MediaProxy runs a local
+		HTTP server (so the Chromecast can fetch streams with our IPTV
+		headers) which needs the server entitlement. Device discovery uses
+		native Bonjour via the bonsoir package, so no special multicast
+		entitlement is required.
+	-->
+	<key>com.apple.security.network.server</key>
+	<true/>
 </dict>
 </plist>

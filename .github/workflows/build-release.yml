@@ -121,7 +121,11 @@ jobs:
           path: artifacts/
 
   build-windows:
-    runs-on: windows-latest
+    # Pinned to windows-2022: the windows-latest image migrated to Server 2025
+    # and no longer ships the Visual Studio toolchain Flutter detects, so the
+    # build fell back to the "Visual Studio 16 2019" generator and failed with
+    # "could not find any instance of Visual Studio". windows-2022 has VS2022.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
 

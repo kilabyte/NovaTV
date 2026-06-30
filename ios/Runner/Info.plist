@@ -58,5 +58,16 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<!--
+		Chromecast casting discovers Cast devices on the local network via
+		Bonjour (_googlecast._tcp). iOS 14+ shows a one-time local-network
+		permission prompt sourced from this description.
+	-->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Nova IPTV discovers Chromecast devices on your local network so you can cast channels to them.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_googlecast._tcp</string>
+	</array>
 </dict>
 </plist>

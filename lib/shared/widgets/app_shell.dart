@@ -9,7 +9,10 @@ import '../../config/router/routes.dart';
 import '../../config/theme/app_colors.dart';
 import '../../core/utils/app_logger.dart';
 import '../../features/epg/presentation/providers/epg_providers.dart';
+import '../../features/player/presentation/providers/cast_providers.dart';
 import '../../features/player/presentation/providers/player_providers.dart';
+import '../../features/player/presentation/widgets/cast_bar.dart';
+import '../../features/player/presentation/widgets/cast_device_picker.dart';
 import '../../features/player/presentation/widgets/mini_player.dart';
 import '../../features/playlist/presentation/providers/playlist_providers.dart';
 import '../../features/settings/presentation/providers/settings_providers.dart';
@@ -143,6 +146,8 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
           widget.child,
           // Mini-player overlay
           const MiniPlayer(),
+          // Chromecast control bar (shown while casting)
+          const CastBar(),
           // Refresh toast overlay
           const RefreshToast(),
         ],
@@ -181,6 +186,8 @@ class _AppShellState extends ConsumerState<AppShell> with WidgetsBindingObserver
           ),
           // Mini-player overlay
           const MiniPlayer(),
+          // Chromecast control bar (shown while casting)
+          const CastBar(),
           // Refresh toast overlay
           const RefreshToast(),
         ],
@@ -279,17 +286,46 @@ class _DesktopSidebar extends ConsumerWidget {
             ),
           ),
 
-          // Settings at bottom
+          // Cast + Settings at bottom
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
               border: Border(top: BorderSide(color: AppColors.border)),
             ),
             padding: const EdgeInsets.all(8),
-            child: _SidebarItem(icon: Icons.settings_rounded, label: 'Settings', isSelected: selectedIndex == 4, collapsed: collapsed, onTap: () => onItemTapped(4)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _SidebarCastItem(collapsed: collapsed),
+                const SizedBox(height: 4),
+                _SidebarItem(icon: Icons.settings_rounded, label: 'Settings', isSelected: selectedIndex == 4, collapsed: collapsed, onTap: () => onItemTapped(4)),
+              ],
+            ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Global Chromecast control in the sidebar (next to Settings). Tapping opens
+/// the device picker; once a device is selected it becomes the app's cast
+/// target, so every channel opened afterwards plays on that device.
+class _SidebarCastItem extends ConsumerWidget {
+  final bool collapsed;
+
+  const _SidebarCastItem({required this.collapsed});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cast = ref.watch(castProvider);
+    final connected = cast.isCasting;
+    return _SidebarItem(
+      icon: connected ? Icons.cast_connected_rounded : Icons.cast_rounded,
+      label: connected ? (cast.device?.name ?? 'Casting') : 'Cast',
+      isSelected: connected,
+      collapsed: collapsed,
+      onTap: () => showCastPicker(context),
     );
   }
 }

@@ -13,7 +13,10 @@ import '../../../../config/theme/app_colors.dart';
 import '../../../epg/domain/entities/program.dart';
 import '../../../epg/presentation/providers/epg_providers.dart';
 import '../../../playlist/presentation/providers/playlist_providers.dart';
+import '../providers/cast_providers.dart';
 import '../providers/player_providers.dart';
+import '../widgets/cast_device_picker.dart';
+import '../widgets/casting_view.dart';
 
 /// Clean video player screen using global player state for mini-player support
 class PlayerScreen extends ConsumerStatefulWidget {
@@ -197,6 +200,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   @override
   Widget build(BuildContext context) {
     final playerState = ref.watch(playerProvider);
+    final isCasting = ref.watch(isCastingProvider);
     final channel = playerState.channel;
     final controller = playerState.controller;
     final isInitialized = controller != null;
@@ -224,6 +228,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               () => ref.read(playerProvider.notifier).togglePlayPause(),
           const SingleActivator(LogicalKeyboardKey.keyF):
               () => _toggleControls(),
+          // C = open the Chromecast device picker.
+          const SingleActivator(LogicalKeyboardKey.keyC):
+              () => _openCastPicker(),
           const SingleActivator(LogicalKeyboardKey.escape):
               () => _minimizePlayer(),
           // M = mute toggle (universal media-player convention).
@@ -272,6 +279,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         onExit: _isDesktop ? (_) => _hideControlsOnHoverExit() : null,
         child: Stack(
           children: [
+            // While casting, the Chromecast plays the stream — replace the
+            // local video and controls with the cast placeholder + remote.
+            if (isCasting)
+              const Positioned.fill(child: CastingView())
+            else ...[
             // Video player
             if (isInitialized && errorMessage == null)
               Center(
@@ -312,6 +324,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                   ? _buildControlsOverlay(playerState, channel)
                   : const SizedBox.shrink(),
             ),
+            ],
           ],
         ),
       ),
@@ -513,6 +526,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
   }
 
+  void _openCastPicker() {
+    showCastPicker(context);
+  }
+
   Widget _buildTopBar(PlayerState playerState, dynamic channel) {
     final isFavorite = ref.watch(isFavoriteProvider(channel?.id ?? '')).valueOrNull ?? false;
 
@@ -586,6 +603,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           ),
           if (channel != null) ...[
             const _VolumeControl(),
+            _ControlIconButton(
+              icon: Icons.cast_rounded,
+              semanticLabel: 'Cast to device',
+              onTap: _openCastPicker,
+            ),
             _ControlIconButton(
               icon: isFavorite
                   ? Icons.star_rounded

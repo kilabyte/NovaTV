@@ -1,0 +1,13 @@
+#EXTM3U x-tvg-url="http://example.com/epg.xml.gz"
+#EXTINF:-1 tvg-id="BBC.One" tvg-name="BBC One HD" group-title="UK, News",BBC One HD
+http://example.com/stream/bbc1
+#EXTINF:-1 tvg-id="BBC.One" tvg-name="BBC One SD" group-title="UK, News",BBC One SD
+http://example.com/stream/bbc1sd
+#EXTINF:-1 tvg-id="CNN.us" group-title="USA" tvg-chno="7",CNN
+http://example.com/stream/cnn
+#EXTINF:-1 tvg-id="espn.us" group-title="Sports",ESPN
+http://example.com/stream/espn
+#EXTINF:-1 group-title="Sports",No EPG Channel
+http://example.com/stream/noepg
+#EXTINF:-1 tvg-id="BBC.ONE" tvg-name="BBC One +1" tvg-shift="1" group-title="UK, News",BBC One +1
+http://example.com/stream/bbc1plus1

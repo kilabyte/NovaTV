@@ -16,20 +16,26 @@ class GuideGroupArgs {
 /// Group programs by channel id for the TV Guide grid. Top-level so it can
 /// run in a compute isolate; also used directly for small datasets.
 ///
-/// Two behaviors that a naive grouping gets wrong:
+/// Three behaviors that a naive grouping gets wrong:
 /// - The epg-id mapping is one-to-many: playlists routinely list HD/SD/FHD
 ///   variants sharing one tvg-id, and a last-writer-wins map left every
 ///   sibling variant with an empty guide row.
 /// - tvg-shift is applied per channel: timeshifted +1/+2 variants reuse the
 ///   base channel's EPG with programme times offset by the shift amount, so
 ///   range-filtering happens after the shift.
+/// - Matching is case-insensitive. Providers routinely disagree on tvg-id
+///   casing between the M3U ("BBC.One") and the XMLTV feed ("bbc.one");
+///   every Hive read path (program indexes, the current-programs map behind
+///   the channel list and favorites) already lowercases, so the guide must
+///   too or those rows render "No program data" while the list shows the
+///   airing show.
 @pragma('vm:entry-point')
 Map<String, List<Program>> groupProgramsForGuide(GuideGroupArgs args) {
   final epgIdToChannelIds = <String, List<String>>{};
   final shiftByChannelId = <String, int>{};
 
   void register(String key, String channelId) {
-    final ids = epgIdToChannelIds.putIfAbsent(key, () => <String>[]);
+    final ids = epgIdToChannelIds.putIfAbsent(key.toLowerCase(), () => <String>[]);
     if (!ids.contains(channelId)) ids.add(channelId);
   }
 
@@ -46,7 +52,7 @@ Map<String, List<Program>> groupProgramsForGuide(GuideGroupArgs args) {
   for (final program in args.programs) {
     // program.channelId contains the tvgId from XMLTV (or sometimes the
     // channel id).
-    final channelIds = epgIdToChannelIds[program.channelId];
+    final channelIds = epgIdToChannelIds[program.channelId.toLowerCase()];
     if (channelIds == null) continue;
 
     for (final channelId in channelIds) {

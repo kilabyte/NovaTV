@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tv generator-info-name="fixture">
+  <channel id="bbc.one"><display-name>BBC One</display-name></channel>
+  <channel id="cnn.us"><display-name>CNN</display-name></channel>
+  <channel id="espn.us"><display-name>ESPN</display-name></channel>
+  <programme channel="bbc.one" start="__NOW_MINUS_30__" stop="__NOW_PLUS_30__"><title>BBC News at Six</title><desc>Headlines</desc></programme>
+  <programme channel="bbc.one" start="__NOW_PLUS_30__" stop="__NOW_PLUS_90__"><title>EastEnders</title></programme>
+  <programme channel="cnn.us" start="__NOW_MINUS_30__" stop="__NOW_PLUS_30__"><title>CNN Newsroom</title></programme>
+  <programme channel="espn.us" start="__NOW_MINUS_30__" stop="__NOW_PLUS_30__"><title>SportsCenter</title><category>Sports</category></programme>
+</tv>

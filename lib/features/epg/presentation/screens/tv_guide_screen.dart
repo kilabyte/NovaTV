@@ -156,8 +156,10 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
   /// isolate boundary directly; the previous implementation built a JSON map
   /// for every program and re-parsed the result on the main isolate, paying
   /// two full dataset copies right when the guide opened.
-  Future<Map<String, List<Program>>> _processProgramsWithCompute(List<Program> programs, List<Channel> channels, DateTime startTime, DateTime endTime) async {
-    if (programs.isEmpty || channels.isEmpty) {
+  Future<Map<String, List<Program>>> _processProgramsWithCompute(List<Program> programs, List<Channel> channels, DateTime startTime, DateTime endTime, {bool synthesizeSportsEvents = false}) async {
+    // With name synthesis on, an empty feed can still yield cells, so only
+    // short-circuit on no channels (or no programmes with synthesis off).
+    if (channels.isEmpty || (programs.isEmpty && !synthesizeSportsEvents)) {
       return <String, List<Program>>{};
     }
 
@@ -167,7 +169,14 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
       debugPrint('EPG: TV Guide - processing ${programs.length} programs, ${channels.length} channels (useCompute: $useCompute)');
     }
 
-    final args = GuideGroupArgs(programs: programs, channels: channels, startTime: startTime, endTime: endTime);
+    final args = GuideGroupArgs(
+      programs: programs,
+      channels: channels,
+      startTime: startTime,
+      endTime: endTime,
+      synthesizeSportsEvents: synthesizeSportsEvents,
+      synthesisReference: DateTime.now(),
+    );
 
     try {
       final Map<String, List<Program>> result;
@@ -507,11 +516,13 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
     // Merge EPG from every playlist so multi-playlist users see all programs.
     final endTime = startTime.add(Duration(hours: _totalHours));
     final programsAsync = ref.watch(programsInRangeAllPlaylistsProvider((start: startTime, end: endTime)));
+    final synthesizeSportsEvents = ref.watch(appSettingsProvider.select((s) => s.sportsEventEpgFromNames));
 
     return programsAsync.when(
       data: (programs) {
-        // Show empty state if no programs
-        if (programs.isEmpty) {
+        // Show empty state if no programs (unless sports-name synthesis can
+        // still produce cells from the channel names).
+        if (programs.isEmpty && !synthesizeSportsEvents) {
           return Column(
             children: [
               _buildTimeHeader(context, startTime),
@@ -549,14 +560,14 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
         final stableEndTime = DateTime(endTime.year, endTime.month, endTime.day, endTime.hour);
 
         // Create a stable key based on data to cache the future
-        final programsKey = '${programs.length}_${channels.length}_${programs.firstOrNull?.id ?? ''}_${channels.firstOrNull?.id ?? ''}_${stableStartTime.millisecondsSinceEpoch}_${stableEndTime.millisecondsSinceEpoch}';
+        final programsKey = '${programs.length}_${channels.length}_${programs.firstOrNull?.id ?? ''}_${channels.firstOrNull?.id ?? ''}_${stableStartTime.millisecondsSinceEpoch}_${stableEndTime.millisecondsSinceEpoch}_${synthesizeSportsEvents ? 'syn' : 'raw'}';
 
         // Only create a new future if the data has changed
         if (_cachedProgramsFuture == null || _lastProgramsKey != programsKey) {
           if (kDebugMode) {
             debugPrint('EPG: TV Guide - creating new processing future (key: $programsKey)');
           }
-          _cachedProgramsFuture = _processProgramsWithCompute(programs, channels, stableStartTime, stableEndTime);
+          _cachedProgramsFuture = _processProgramsWithCompute(programs, channels, stableStartTime, stableEndTime, synthesizeSportsEvents: synthesizeSportsEvents);
           _lastProgramsKey = programsKey;
         }
 

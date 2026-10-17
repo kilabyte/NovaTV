@@ -37,13 +37,14 @@ class AppSettingsModelAdapter extends TypeAdapter<AppSettingsModel> {
       playerVolume: fields[15] == null ? 1.0 : (fields[15] as num).toDouble(),
       playerMuted: fields[16] == null ? false : fields[16] as bool,
       sidebarCollapsed: fields[17] == null ? false : fields[17] as bool,
+      sportsEventEpgFromNames: fields[18] == null ? false : fields[18] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, AppSettingsModel obj) {
     writer
-      ..writeByte(18)
+      ..writeByte(19)
       ..writeByte(0)
       ..write(obj.themeMode)
       ..writeByte(1)
@@ -79,7 +80,9 @@ class AppSettingsModelAdapter extends TypeAdapter<AppSettingsModel> {
       ..writeByte(16)
       ..write(obj.playerMuted)
       ..writeByte(17)
-      ..write(obj.sidebarCollapsed);
+      ..write(obj.sidebarCollapsed)
+      ..writeByte(18)
+      ..write(obj.sportsEventEpgFromNames);
   }
 
   @override

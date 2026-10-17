@@ -12,6 +12,8 @@ Program program(String channelId, DateTime start, DateTime end, {String title = 
 }
 
 void main() {
+  sportsEventSynthesisTests();
+
   final gridStart = DateTime(2026, 6, 11);
   final gridEnd = DateTime(2026, 6, 18);
 
@@ -105,6 +107,78 @@ void main() {
       final map = groupProgramsForGuide(GuideGroupArgs(programs: programs, channels: channels, startTime: gridStart, endTime: gridEnd));
 
       expect(map, isEmpty);
+    });
+  });
+}
+
+/// Opt-in synthesis of guide cells from sports event-channel names. Uses the
+/// exact provider format observed in the NFL group of a real playlist.
+void sportsEventSynthesisTests() {
+  final gridStart = DateTime(2026, 10, 16);
+  final gridEnd = DateTime(2026, 10, 23);
+  final reference = DateTime(2026, 10, 17, 12);
+
+  Channel named(String id, String name, {String? tvgId}) {
+    return Channel(id: id, name: name, url: 'http://example.com/$id', playlistId: 'p1', tvgId: tvgId, group: 'NFL');
+  }
+
+  final channels = [
+    named('redzone', 'NFL RedZone', tvgId: 'nflredzone.us'),
+    named('nfl03', 'NFL 03: Falcons vs Bears (10.18 1:00PM ET)'),
+    named('nfl13', 'NFL 13: Packers vs Cowboys (10.18 8:20PM ET)'),
+    named('nfl15', 'NFL 15: No Event Scheduled'),
+    named('mls01', 'MLS 01: FC Cincinnati vs New England Revolution Oct 14 7:30 PM'),
+  ];
+  final feed = [
+    program('nflredzone.us', DateTime.utc(2026, 10, 18, 17), DateTime.utc(2026, 10, 18, 23, 30), title: 'NFL RedZone'),
+  ];
+
+  group('groupProgramsForGuide sports event synthesis', () {
+    test('disabled (default): event channels without EPG stay empty', () {
+      final map = groupProgramsForGuide(GuideGroupArgs(programs: feed, channels: channels, startTime: gridStart, endTime: gridEnd));
+      expect(map.keys, ['redzone']);
+      expect(map['nfl03'], isNull);
+      expect(map['nfl15'], isNull);
+    });
+
+    test('enabled: scheduled games get one synthetic cell, placeholders and unparsable names get none', () {
+      final map = groupProgramsForGuide(GuideGroupArgs(programs: feed, channels: channels, startTime: gridStart, endTime: gridEnd, synthesizeSportsEvents: true, synthesisReference: reference));
+      expect(map['redzone'], hasLength(1));
+      expect(map['redzone']!.single.id, isNot(startsWith(syntheticSportsProgramIdPrefix)));
+
+      final falcons = map['nfl03']!.single;
+      expect(falcons.id, '${syntheticSportsProgramIdPrefix}nfl03');
+      expect(falcons.channelId, 'nfl03');
+      expect(falcons.title, 'Falcons vs Bears');
+      expect(falcons.category, 'NFL');
+      expect(falcons.start.toUtc(), DateTime.utc(2026, 10, 18, 17));
+      expect(falcons.end.toUtc(), DateTime.utc(2026, 10, 18, 20));
+      expect(falcons.isLive, isTrue);
+
+      expect(map['nfl13']!.single.start.toUtc(), DateTime.utc(2026, 10, 19, 0, 20));
+      expect(map['nfl15'], isNull, reason: 'No Event Scheduled must not become a programme');
+      expect(map['mls01'], isNull, reason: 'no zone in the name, nothing is invented');
+    });
+
+    test('enabled: real EPG always wins over the name', () {
+      final withFeed = [
+        ...feed,
+        program('nfl03', DateTime.utc(2026, 10, 18, 16), DateTime.utc(2026, 10, 18, 19, 30), title: 'From feed'),
+      ];
+      final map = groupProgramsForGuide(GuideGroupArgs(programs: withFeed, channels: channels, startTime: gridStart, endTime: gridEnd, synthesizeSportsEvents: true, synthesisReference: reference));
+      expect(map['nfl03']!.single.title, 'From feed');
+    });
+
+    test('enabled: an entirely empty feed still yields synthetic cells', () {
+      final map = groupProgramsForGuide(GuideGroupArgs(programs: const [], channels: channels, startTime: gridStart, endTime: gridEnd, synthesizeSportsEvents: true, synthesisReference: reference));
+      expect(map.keys.toSet(), {'nfl03', 'nfl13'});
+      expect(map['redzone'], isNull);
+    });
+
+    test('enabled: a kickoff outside the grid window is dropped', () {
+      final map = groupProgramsForGuide(GuideGroupArgs(programs: feed, channels: channels, startTime: DateTime(2026, 10, 20), endTime: DateTime(2026, 10, 27), synthesizeSportsEvents: true, synthesisReference: reference));
+      expect(map['nfl03'], isNull);
+      expect(map['nfl13'], isNull);
     });
   });
 }

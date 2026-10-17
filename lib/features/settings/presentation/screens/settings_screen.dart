@@ -91,6 +91,15 @@ class SettingsScreen extends ConsumerWidget {
                       },
                     ),
                     if (settings.autoRefreshEpg) _SettingsTile(icon: Icons.timelapse_rounded, title: 'EPG refresh interval', subtitle: 'Every ${settings.epgRefreshInterval} hours', onTap: () => _showRefreshIntervalPicker(context, ref, isPlaylist: false), showChevron: true),
+                    _ToggleTile(
+                      icon: Icons.sports_football_rounded,
+                      title: 'Sports events from channel names',
+                      subtitle: 'Show kickoff cells for event channels with no EPG listing',
+                      value: settings.sportsEventEpgFromNames,
+                      onChanged: (value) {
+                        ref.read(appSettingsProvider.notifier).setSportsEventEpgFromNames(value);
+                      },
+                    ),
                     _SettingsTile(icon: Icons.access_time_rounded, title: 'Timezone offset', subtitle: _formatTimezoneOffset(settings.epgTimezoneOffset), onTap: () => _showTimezoneOffsetPicker(context, ref), showChevron: true),
                   ],
                 ),

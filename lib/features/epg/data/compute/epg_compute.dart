@@ -1,5 +1,6 @@
 import '../../../playlist/domain/entities/channel.dart';
 import '../../domain/entities/program.dart';
+import '../parsers/sports_event_name_parser.dart';
 
 /// Arguments for [groupProgramsForGuide]. Entities are plain immutable Dart
 /// objects, so they cross the compute-isolate boundary as-is with no JSON
@@ -10,8 +11,28 @@ class GuideGroupArgs {
   final DateTime startTime;
   final DateTime endTime;
 
-  const GuideGroupArgs({required this.programs, required this.channels, required this.startTime, required this.endTime});
+  /// Opt-in: for channels that end up with no EPG programmes, parse a
+  /// kickoff out of the channel name (see [SportsEventNameParser]) and add a
+  /// single synthetic cell. Off by default; never overrides real EPG data.
+  final bool synthesizeSportsEvents;
+
+  /// Anchor for resolving the year of a "MM.DD" kickoff. The guide passes
+  /// the current time; tests pass a fixed date. Falls back to the grid start.
+  final DateTime? synthesisReference;
+
+  const GuideGroupArgs({
+    required this.programs,
+    required this.channels,
+    required this.startTime,
+    required this.endTime,
+    this.synthesizeSportsEvents = false,
+    this.synthesisReference,
+  });
 }
+
+/// Prefix of ids for programmes synthesized from channel names, so callers
+/// can tell them apart from feed data.
+const String syntheticSportsProgramIdPrefix = 'synthetic-sports:';
 
 /// Group programs by channel id for the TV Guide grid. Top-level so it can
 /// run in a compute isolate; also used directly for small datasets.
@@ -65,6 +86,34 @@ Map<String, List<Program>> groupProgramsForGuide(GuideGroupArgs args) {
             );
       if (!shifted.end.isAfter(args.startTime) || !shifted.start.isBefore(args.endTime)) continue;
       map.putIfAbsent(channelId, () => <Program>[]).add(shifted);
+    }
+  }
+
+  if (args.synthesizeSportsEvents) {
+    final parser = SportsEventNameParser();
+    final reference = args.synthesisReference ?? args.startTime;
+    for (final channel in args.channels) {
+      // Real EPG wins: any feed programme for this channel inside the grid
+      // window suppresses synthesis. (Feed listings outside the window do
+      // not count, so a channel whose feed ends early can still get a cell.)
+      if (map[channel.id]?.isNotEmpty ?? false) continue;
+      final info = parser.parse(channel.name, reference: reference);
+      if (info == null || !info.hasKickoff) continue; // unparsable or "No Event"
+      final start = info.start!;
+      final end = info.end!;
+      if (!end.isAfter(args.startTime) || !start.isBefore(args.endTime)) continue;
+      map[channel.id] = [
+        Program(
+          id: '$syntheticSportsProgramIdPrefix${channel.id}',
+          channelId: channel.id,
+          title: info.title,
+          start: start,
+          end: end,
+          category: info.league,
+          description: 'Kickoff time taken from the channel name (${info.zone}); the EPG feed has no listing for this channel.',
+          isLive: true,
+        ),
+      ];
     }
   }
 

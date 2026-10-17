@@ -63,6 +63,12 @@ class AppSettingsModel extends HiveObject {
   @HiveField(17)
   final bool sidebarCollapsed;
 
+  /// Opt-in: TV Guide shows a synthetic cell for sports "event" channels
+  /// whose name carries a kickoff ("NFL 03: A vs B (10.18 1:00PM ET)") when
+  /// the EPG feed has no listing for them. Off by default.
+  @HiveField(18)
+  final bool sportsEventEpgFromNames;
+
   AppSettingsModel({
     this.themeMode = 'dark',
     this.autoRefreshPlaylists = false,
@@ -82,6 +88,7 @@ class AppSettingsModel extends HiveObject {
     this.playerVolume = 1.0,
     this.playerMuted = false,
     this.sidebarCollapsed = false,
+    this.sportsEventEpgFromNames = false,
   });
 
   AppSettingsModel copyWith({
@@ -104,6 +111,7 @@ class AppSettingsModel extends HiveObject {
     double? playerVolume,
     bool? playerMuted,
     bool? sidebarCollapsed,
+    bool? sportsEventEpgFromNames,
   }) {
     return AppSettingsModel(
       themeMode: themeMode ?? this.themeMode,
@@ -124,6 +132,7 @@ class AppSettingsModel extends HiveObject {
       playerVolume: playerVolume ?? this.playerVolume,
       playerMuted: playerMuted ?? this.playerMuted,
       sidebarCollapsed: sidebarCollapsed ?? this.sidebarCollapsed,
+      sportsEventEpgFromNames: sportsEventEpgFromNames ?? this.sportsEventEpgFromNames,
     );
   }
 }

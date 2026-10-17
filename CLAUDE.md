@@ -133,7 +133,7 @@ Uses **Flutter Riverpod** exclusively:
 - After adding/modifying Hive fields, run `build_runner` to regenerate `*.g.dart` files
 - Adapters are auto-registered via `lib/hive_registrar.g.dart`
 - Type IDs: PlaylistModel=0, ChannelModel=1, ProgramModel=3, EpgChannelModel=4, EpgMetadataModel=5, AppSettingsModel=6 (ID 2 unused)
-- AppSettingsModel field IDs: 0-17 used, next available is 18
+- AppSettingsModel field IDs: 0-18 used, next available is 19
 
 **Adding new persisted settings:**
 1. Add `@HiveField(N)` to `AppSettingsModel` (use next available ID)

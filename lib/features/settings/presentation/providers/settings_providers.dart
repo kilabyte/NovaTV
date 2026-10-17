@@ -150,6 +150,12 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsModel> {
     _saveSettings();
   }
 
+  void setSportsEventEpgFromNames(bool enabled) {
+    if (state.sportsEventEpgFromNames == enabled) return;
+    state = state.copyWith(sportsEventEpgFromNames: enabled);
+    _saveSettings();
+  }
+
   void setPlayerVolume(double volume) {
     final clamped = volume.clamp(0.0, 1.0);
     if (state.playerVolume == clamped) return;

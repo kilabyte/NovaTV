@@ -71,6 +71,23 @@ void main() {
   bool noneOf(String text) => find.text(text).evaluate().isEmpty;
   bool anyOf(String text) => find.text(text).evaluate().isNotEmpty;
 
+  /// True once every horizontal scrollable has settled: the guide animates
+  /// to "now" after grouping lands, and cells outside the viewport window
+  /// are not built at all, so asserting mid-animation sees a partial grid.
+  /// The animation is issued in the same frame that builds the first cells,
+  /// so by the time this is polled the position is already scrolling; no
+  /// offset guard is needed (and the target clamps to 0 before 1 AM).
+  bool horizontalScrollIdle(WidgetTester tester) {
+    final views = tester.widgetList<SingleChildScrollView>(find.byType(SingleChildScrollView)).where((v) => v.scrollDirection == Axis.horizontal);
+    if (views.isEmpty) return false;
+    for (final v in views) {
+      final c = v.controller;
+      if (c == null || !c.hasClients) return false;
+      if (c.position.isScrollingNotifier.value) return false;
+    }
+    return true;
+  }
+
   /// Every Text currently on screen, for failure diagnostics.
   String visibleTexts(WidgetTester tester) {
     return tester.widgetList<Text>(find.byType(Text)).map((t) => t.data ?? t.textSpan?.toPlainText() ?? '').where((s) => s.isNotEmpty).join(' | ');
@@ -79,6 +96,13 @@ void main() {
   /// Seed Hive, pump [screen], run [body], tear Hive down. All I/O in real time.
   Future<void> withPopulatedScreen(WidgetTester tester, Widget screen, Size surface, bool Function() ready, Future<void> Function() body) async {
     Directory? dir;
+    // Size the view itself, not just the test surface: the TV Guide culls
+    // off-viewport cells using MediaQuery width, and setSurfaceSize alone
+    // leaves MediaQuery at the default 800x600 while the grid lays out at
+    // [surface], so culling would run against the wrong viewport.
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = surface;
+    addTearDown(tester.view.reset);
     addTearDown(() => tester.binding.setSurfaceSize(null));
     // Everything below the temp dir creation runs inside the guard so a
     // failure during seeding or the first pump still closes Hive and
@@ -136,9 +160,14 @@ void main() {
 
   testWidgets('TV guide grid shows programme cells for every channel that has EPG', (tester) async {
     await withPopulatedScreen(tester, const TvGuideScreen(), const Size(1400, 900), () => anyOf('SportsCenter') && anyOf('No program data'), () async {
-      // Grouping resolves through a FutureBuilder and the grid then nudges
-      // its scroll position back to "now"; wait for that animation to land.
+      // Grouping resolves through a FutureBuilder and the grid then animates
+      // its scroll position to "now". Cells outside the viewport window are
+      // not built, and the +1 variant's cell sits an hour to the right of the
+      // others, so wait for the animation to land rather than for the first
+      // cell to appear.
       await settleUntil(tester, () => anyOf('BBC News at Six') && anyOf('CNN Newsroom'));
+      await settleUntil(tester, () => horizontalScrollIdle(tester));
+      await settleUntil(tester, () => find.text('BBC News at Six').evaluate().length == 3, maxFrames: 20);
       final texts = visibleTexts(tester);
       expect(find.text('TV Guide'), findsOneWidget);
       expect(find.text('No EPG data available'), findsNothing, reason: 'Visible: $texts');

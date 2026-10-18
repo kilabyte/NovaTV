@@ -2,7 +2,7 @@
 // Do not modify
 // Check in to version control
 
-import 'package:hive_ce/hive.dart';
+import 'package:hive_ce/hive_ce.dart';
 import 'package:novaiptv/features/epg/data/models/epg_channel_model.dart';
 import 'package:novaiptv/features/epg/data/models/epg_metadata_model.dart';
 import 'package:novaiptv/features/epg/data/models/program_model.dart';

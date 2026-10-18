@@ -481,7 +481,7 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
         );
       },
       loading: () => SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary))),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
     );
   }
 
@@ -1283,14 +1283,14 @@ class _ChannelTileState extends State<_ChannelTile> {
                             fit: BoxFit.contain,
                             memCacheWidth: 80,
                             memCacheHeight: 80,
-                            placeholder: (_, __) => Center(
+                            placeholder: (_, _) => Center(
                               child: SizedBox(
                                 width: 16,
                                 height: 16,
                                 child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary)),
                               ),
                             ),
-                            errorWidget: (_, __, ___) => Icon(Icons.tv_rounded, size: 18, color: AppColors.textMuted),
+                            errorWidget: (_, _, _) => Icon(Icons.tv_rounded, size: 18, color: AppColors.textMuted),
                           ),
                         ),
                       )

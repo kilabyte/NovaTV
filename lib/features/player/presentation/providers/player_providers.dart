@@ -485,7 +485,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     final path = uri?.path ?? url;
 
     final candidates = <String>[
-      if (cached != null) cached,
+      ?cached,
       // Always try the raw URL and common extensions in case the cached
       // variant has gone bad.
       if (cached != url) url,

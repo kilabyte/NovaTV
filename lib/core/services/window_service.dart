@@ -4,9 +4,8 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
-// screen_retriever ships as a window_manager dependency; used to validate
-// restored window positions against attached displays.
-// ignore: depend_on_referenced_packages
+// screen_retriever (declared in pubspec) is used to validate restored
+// window positions against attached displays.
 import 'package:screen_retriever/screen_retriever.dart';
 import 'package:window_manager/window_manager.dart';
 

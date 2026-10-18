@@ -446,7 +446,7 @@ class _RecentlyWatchedSectionState extends ConsumerState<_RecentlyWatchedSection
         );
       },
       loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
     );
   }
 }
@@ -578,7 +578,7 @@ class _GroupsSection extends ConsumerWidget {
                 child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textMuted)),
               ),
             ),
-            error: (_, __) => const SizedBox(),
+            error: (_, _) => const SizedBox(),
           ),
       ],
     );
@@ -1016,7 +1016,7 @@ class _MobileNavBar extends ConsumerWidget {
                         groupsAsync.when(
                           data: (groups) => Text('${groups.length} groups', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
                           loading: () => const SizedBox.shrink(),
-                          error: (_, __) => const SizedBox.shrink(),
+                          error: (_, _) => const SizedBox.shrink(),
                         ),
                       ],
                     ),

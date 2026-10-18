@@ -257,7 +257,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
           fit: BoxFit.contain,
           memCacheWidth: 100,
           memCacheHeight: 100,
-          errorWidget: (_, __, ___) => Icon(Icons.live_tv_rounded, size: 14, color: AppColors.textMuted),
+          errorWidget: (_, _, _) => Icon(Icons.live_tv_rounded, size: 14, color: AppColors.textMuted),
         ),
       );
     }

@@ -475,8 +475,8 @@ class _ChannelLogo extends StatelessWidget {
                   fit: BoxFit.contain,
                   memCacheWidth: 48,
                   memCacheHeight: 48,
-                  placeholder: (_, __) => _buildPlaceholder(),
-                  errorWidget: (_, __, ___) => _buildPlaceholder(),
+                  placeholder: (_, _) => _buildPlaceholder(),
+                  errorWidget: (_, _, _) => _buildPlaceholder(),
                 ),
               )
             : _buildPlaceholder(),

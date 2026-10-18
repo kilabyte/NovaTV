@@ -13,8 +13,8 @@ dependencies:
     sdk: flutter
 
   # Video Player - Cross-platform with HLS/DASH/RTMP support
-  media_kit: ^1.1.11
-  media_kit_video: ^1.2.5
+  media_kit: ^1.2.6
+  media_kit_video: ^2.0.1
   media_kit_libs_video: ^1.0.5
 
   # Chromecast / Google Cast (pure-Dart CastV2 — works on desktop + mobile).
@@ -28,14 +28,14 @@ dependencies:
   flutter_riverpod: ^2.5.1
 
   # Local Storage
-  hive_ce: ^2.6.0
+  hive_ce: ^2.22.0
   hive_ce_flutter: ^2.1.0
 
   # Navigation
-  go_router: ^14.2.0
+  go_router: ^17.2.3
 
   # HTTP & Networking
-  dio: ^5.4.0
+  dio: ^5.11.1
 
   # XML/EPG Parsing
   xml: ^6.5.0
@@ -51,13 +51,17 @@ dependencies:
   fpdart: ^1.1.0
   uuid: ^4.4.0
   logger: ^2.2.0
-  equatable: ^2.0.5
+  equatable: ^3.0.0
 
   # Icons
   cupertino_icons: ^1.0.8
 
   # Window management (macOS/Windows/Linux)
-  window_manager: ^0.4.3
+  window_manager: ^0.5.2
+  # Imported directly by lib/core/services/window_service.dart to validate
+  # restored window bounds against the current displays; pinned explicitly
+  # rather than relying on it staying a window_manager transitive.
+  screen_retriever: ^0.2.2
 
   # Chromecast device discovery (native Bonjour) + FFI to the system resolver
   # (getaddrinfo) for resolving `.local` mDNS hostnames, which Dart can't.
@@ -67,10 +71,10 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  build_runner: ^2.4.9
-  hive_ce_generator: ^1.6.0
+  build_runner: ^2.15.1
+  hive_ce_generator: ^1.11.1
   mocktail: ^1.0.3
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
 flutter:
   uses-material-design: true

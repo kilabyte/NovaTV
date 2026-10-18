@@ -176,7 +176,7 @@ class _ChannelRowState extends ConsumerState<_ChannelRow> {
                         // Add memory limits for better performance on Android
                         memCacheWidth: 48,
                         memCacheHeight: 48,
-                        errorWidget: (_, __, ___) => _LogoPlaceholder(),
+                        errorWidget: (_, _, _) => _LogoPlaceholder(),
                       )
                     : _LogoPlaceholder(),
               ),
@@ -213,7 +213,7 @@ class _ChannelRowState extends ConsumerState<_ChannelRow> {
                     programAsync.when(
                       data: (program) => _ProgramInfo(program: program),
                       loading: () => const Text('Loading...', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
-                      error: (_, __) => Text(widget.channel.group ?? 'No program info', style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                      error: (_, _) => Text(widget.channel.group ?? 'No program info', style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
                     ),
                   ],
                 ),
@@ -227,7 +227,7 @@ class _ChannelRowState extends ConsumerState<_ChannelRow> {
                 child: programAsync.when(
                   data: (program) => program != null ? _ProgressBar(progress: program.progress) : const SizedBox(),
                   loading: () => const SizedBox(),
-                  error: (_, __) => const SizedBox(),
+                  error: (_, _) => const SizedBox(),
                 ),
               ),
 
@@ -245,7 +245,7 @@ class _ChannelRowState extends ConsumerState<_ChannelRow> {
                         )
                       : const SizedBox(),
                   loading: () => const SizedBox(),
-                  error: (_, __) => const SizedBox(),
+                  error: (_, _) => const SizedBox(),
                 ),
               ),
 

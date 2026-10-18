@@ -123,7 +123,7 @@ class _ChannelArt extends StatelessWidget {
           ? CachedNetworkImage(
               imageUrl: logo,
               fit: BoxFit.contain,
-              errorWidget: (_, __, ___) => const _ArtFallback(),
+              errorWidget: (_, _, _) => const _ArtFallback(),
             )
           : const _ArtFallback(),
     );

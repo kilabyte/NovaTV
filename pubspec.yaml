@@ -4,7 +4,9 @@ publish_to: 'none'
 version: 1.0.23+23
 
 environment:
-  sdk: ^3.9.2
+  # Floors enforce the eMudhra CA fix (Dart 3.13.7 / Flutter 3.47.8, GHSA-frr6-h895-5pxp).
+  sdk: '>=3.13.7 <4.0.0'
+  flutter: '>=3.47.8'
 
 dependencies:
   flutter:

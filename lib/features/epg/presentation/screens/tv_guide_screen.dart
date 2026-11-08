@@ -235,18 +235,19 @@ class _TvGuideScreenState extends ConsumerState<TvGuideScreen> {
   }
 
   void _scrollToCurrentTime() {
-    // Scroll so that current time is offset to the right (about 1/3 from left edge)
-    // This gives better visibility of what's currently playing
     final now = DateTime.now();
     final minutesSinceBase = now.difference(_baseDate).inMinutes;
 
     if (minutesSinceBase >= 0 && minutesSinceBase < (_totalHours * 60)) {
-      // Calculate position for current time, then shift left by ~1 hour width
-      // so "now" appears more to the right in the viewport
       final rawOffset = (minutesSinceBase / 60.0) * _hourWidth;
-      final offset = rawOffset - _hourWidth; // Shift view back by 1 hour
       if (_timeHeaderController.hasClients) {
-        final maxOffset = (_totalHours * _hourWidth) - 400.0;
+        final position = _timeHeaderController.position;
+        // Keep the desktop's hour of history only when two hours fit. On
+        // phones it consumes most of the programme viewport and presents
+        // an empty leading block when current listings start recently.
+        final lookback = position.viewportDimension < _hourWidth * 2 ? 0.0 : _hourWidth;
+        final offset = rawOffset - lookback;
+        final maxOffset = position.maxScrollExtent;
         if (kDebugMode) {
           final pos = _timeHeaderController.position;
           debugPrint('EPG: scrollToNow target=${offset.clamp(0.0, maxOffset)} pixels=${pos.pixels} maxScrollExtent=${pos.maxScrollExtent} viewport=${pos.viewportDimension}');

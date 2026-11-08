@@ -124,6 +124,9 @@ void main() {
       });
       await settleUntil(tester, ready);
       await body();
+      await tester.pumpWidget(const SizedBox.shrink());
+      // Drain the existing scroll-to-now debug diagnostic futures.
+      await tester.pump(const Duration(seconds: 2));
     } finally {
       final d = dir;
       if (d != null) {
@@ -179,4 +182,58 @@ void main() {
       expect(find.text('BBC News at Six'), findsNWidgets(3), reason: 'Visible: $texts');
     });
   });
+
+  // An unconditional hour of history consumes most of a phone timeline.
+  for (final surface in [const Size(390, 844), const Size(480, 900), const Size(579, 900), const Size(580, 900), const Size(581, 900), const Size(1400, 900)]) {
+    testWidgets('TV guide now alignment at ${surface.width}px survives category changes', (tester) async {
+      await withPopulatedScreen(tester, const TvGuideScreen(), surface, () => anyOf('SportsCenter'), () async {
+        Future<void> expectAligned(String programTitle) async {
+          await settleUntil(tester, () => anyOf(programTitle) && horizontalScrollIdle(tester));
+          await tester.pump(const Duration(milliseconds: 400));
+          expect(find.text(programTitle), findsOneWidget);
+          final views = tester.widgetList<SingleChildScrollView>(find.byType(SingleChildScrollView))
+              .where((v) => v.scrollDirection == Axis.horizontal).toList();
+          expect(views, hasLength(2));
+          final header = views.first.controller!;
+          final grid = views.last.controller!;
+          final current = DateTime.now();
+          final base = DateTime(current.year, current.month, current.day);
+          final nowOffset = current.difference(base).inMinutes / 60.0 * 220;
+          final lookback = header.position.viewportDimension < 440 ? 0.0 : 220.0;
+          final expected = (nowOffset - lookback).clamp(0.0, header.position.maxScrollExtent);
+          expect(header.offset, closeTo(expected, 4), reason: 'no empty hour before now on phones');
+          expect(grid.offset, closeTo(header.offset, 0.01), reason: 'header and grid stay linked');
+          if (lookback == 0) {
+            final cell = find.ancestor(of: find.text(programTitle), matching: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_ProgramCell'));
+            expect(cell, findsOneWidget);
+            final cellRect = tester.getRect(cell);
+            expect(cellRect.left, lessThanOrEqualTo(141), reason: 'airing programme reaches channel boundary');
+            expect(cellRect.right, greaterThan(140));
+          }
+          expect(tester.takeException(), isNull);
+        }
+        await expectAligned('SportsCenter');
+        final grid = tester.widgetList<SingleChildScrollView>(find.byType(SingleChildScrollView))
+            .lastWhere((v) => v.scrollDirection == Axis.horizontal).controller!;
+        grid.jumpTo(grid.offset + 660);
+        await tester.pump();
+        await tester.tap(find.byTooltip('Go to now'));
+        await tester.pump(const Duration(milliseconds: 400));
+        await expectAligned('SportsCenter');
+        for (final entry in [('Sports', 'SportsCenter'), ('USA', 'CNN Newsroom'), ('All Channels', 'SportsCenter')]) {
+          grid.jumpTo(grid.offset + 660);
+          await tester.pump();
+          // Exercise the dropdown's actual category callback, with Hive
+          // writes in the real async zone rather than the fake frame clock.
+          await tester.runAsync(() async {
+            tester.widget<DropdownButton<String?>>(find.byType(DropdownButton<String?>))
+                .onChanged!(entry.$1 == 'All Channels' ? null : entry.$1);
+            await Future<void>.delayed(const Duration(milliseconds: 20));
+          });
+          await tester.pump();
+          await expectAligned(entry.$2);
+        }
+      });
+    });
+  }
 }
